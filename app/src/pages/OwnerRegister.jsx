@@ -1,50 +1,156 @@
 import "./../styles/OwnerRegister.css";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
+
 function OwnerRegister() {
 
   const navigate = useNavigate();
 
+  const [fullName, setFullName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+
+
+  async function handleRegister() {
+
+    setLoading(true);
+    setError("");
+
+    const { data, error } = await supabase.auth.signUp({
+
+      email,
+      password,
+
+      options: {
+        data: {
+          full_name: fullName,
+          mobile: mobile,
+          role: "owner"
+        }
+      }
+
+    });
+
+
+    if (error) {
+
+      setError(error.message);
+      setLoading(false);
+      return;
+
+    }
+
+
+    if (data.user) {
+
+      navigate("/car-register");
+
+    }
+
+
+    setLoading(false);
+
+  }
+
+
+
   return (
     <div className="register-page">
+
       <div className="register-card">
 
         <h1 className="register-logo">
           کارنگار
         </h1>
 
+
         <h2 className="register-title">
           ثبت اطلاعات مالک خودرو
         </h2>
 
+
         <p className="register-subtitle">
-          برای شروع اطلاعات اولیه خود را وارد کنید.
+          برای شروع حساب کاربری خود را بسازید.
         </p>
+
+
 
         <div className="form-group">
           <label>نام و نام خانوادگی</label>
-          <input type="text" placeholder="نام خود را وارد کنید" />
+          <input
+            type="text"
+            placeholder="نام خود را وارد کنید"
+            value={fullName}
+            onChange={(e)=>setFullName(e.target.value)}
+          />
         </div>
+
+
 
         <div className="form-group">
           <label>شماره موبایل</label>
-          <input type="tel" placeholder="09xxxxxxxxx" />
+          <input
+            type="tel"
+            placeholder="09xxxxxxxxx"
+            value={mobile}
+            onChange={(e)=>setMobile(e.target.value)}
+          />
         </div>
+
+
 
         <div className="form-group">
-          <label>پلاک خودرو</label>
-          <input type="text" placeholder="پلاک خودرو" />
+          <label>ایمیل</label>
+          <input
+            type="email"
+            placeholder="example@email.com"
+            value={email}
+            onChange={(e)=>setEmail(e.target.value)}
+          />
         </div>
 
+
+
+        <div className="form-group">
+          <label>رمز عبور</label>
+          <input
+            type="password"
+            placeholder="حداقل ۶ کاراکتر"
+            value={password}
+            onChange={(e)=>setPassword(e.target.value)}
+          />
+        </div>
+
+
+
+        {error && (
+          <p className="error-message">
+            {error}
+          </p>
+        )}
+
+
+
         <button
-  className="continue-btn"
-  onClick={() => navigate("/car-register")}
->
-  ادامه
-</button>
+          className="continue-btn"
+          onClick={handleRegister}
+          disabled={loading}
+        >
+          {loading ? "در حال ثبت..." : "ادامه"}
+        </button>
+
 
       </div>
+
     </div>
   );
 }
+
 
 export default OwnerRegister;
