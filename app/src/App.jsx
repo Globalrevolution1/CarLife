@@ -5,7 +5,7 @@ import OwnerRegister from "./pages/OwnerRegister";
 import CarRegister from "./pages/CarRegister";
 import CarProfile from "./pages/CarProfile";
 import AddService from "./pages/AddService";
-
+import SupabaseTest from "./pages/SupabaseTest";
 
 function App() {
   return (
@@ -41,6 +41,11 @@ function App() {
           path="/add-service"
           element={<AddService />}
         />
+
+        <Route
+  path="/test"
+  element={<SupabaseTest />}
+/>
 
       </Routes>
 
