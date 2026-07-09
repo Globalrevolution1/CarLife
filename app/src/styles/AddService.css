@@ -109,3 +109,6 @@
 .continue-btn:hover {
   opacity: 0.9;
 }
+.service-description {
+  text-align: right;
+}

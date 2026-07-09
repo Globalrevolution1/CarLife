@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import "./../styles/CarProfile.css";
 
@@ -6,9 +7,18 @@ import "./../styles/CarProfile.css";
 function CarProfile() {
 
 
+  const { id } = useParams();
+
+  const navigate = useNavigate();
+
+
   const [car, setCar] = useState(null);
 
+  const [services, setServices] = useState([]);
+
   const [loading, setLoading] = useState(true);
+
+
 
 
 
@@ -21,88 +31,114 @@ function CarProfile() {
 
 
 
+
   async function loadCar() {
 
 
-    try {
+    const {
+
+      data,
+
+      error
+
+    } = await supabase
+
+      .from("vehicles")
+
+      .select(`
+
+        id,
+
+        brand,
+
+        model,
+
+        production_year_solar,
+
+        production_year_gregorian,
+
+        color,
+
+        vin
+
+      `)
+
+      .eq("id", id)
+
+      .single();
 
 
-      const {
-        data: {
-          user
+
+
+
+    if (error) {
+
+      console.log(error);
+
+      setLoading(false);
+
+      return;
+
+    }
+
+
+
+
+
+    setCar(data);
+
+
+
+
+
+    const {
+
+      data: servicesData,
+
+      error: servicesError
+
+    } = await supabase
+
+      .from("vehicle_services")
+
+      .select("*")
+
+      .eq(
+
+        "vehicle_id",
+
+        id
+
+      )
+
+      .order(
+
+        "created_at",
+
+        {
+
+          ascending: false
+
         }
-      } = await supabase.auth.getUser();
 
-
-
-
-      if (!user) {
-
-        setLoading(false);
-        return;
-
-      }
-
-
-
-
-
-      const {
-        data,
-        error
-      } = await supabase
-        .from("vehicle_ownerships")
-        .select(`
-          vehicle_id,
-          vehicles (
-            id,
-            brand,
-            model,
-            production_year_solar,
-            production_year_gregorian,
-            color,
-            vin
-          )
-        `)
-        .eq(
-          "owner_id",
-          user.id
-        )
-        .single();
-
-
-
-
-
-      if (error) {
-
-        console.log(
-          "PROFILE ERROR:",
-          error
-        );
-
-        setLoading(false);
-        return;
-
-      }
-
-
-
-
-
-      setCar(
-        data.vehicles
       );
 
 
 
-    } catch(error) {
 
 
-      console.log(error);
+    if (!servicesError) {
 
+      setServices(
+
+        servicesData
+
+      );
 
     }
+
+
+
 
 
     setLoading(false);
@@ -114,7 +150,10 @@ function CarProfile() {
 
 
 
+
+
   if (loading) {
+
 
     return (
 
@@ -123,7 +162,7 @@ function CarProfile() {
         <div className="profile-card">
 
           <h2>
-            در حال ساخت پرونده...
+            در حال آماده سازی پرونده...
           </h2>
 
         </div>
@@ -132,7 +171,9 @@ function CarProfile() {
 
     );
 
+
   }
+
 
 
 
@@ -141,6 +182,7 @@ function CarProfile() {
 
   if (!car) {
 
+
     return (
 
       <div className="profile-page">
@@ -148,7 +190,7 @@ function CarProfile() {
         <div className="profile-card">
 
           <h2>
-            هنوز پرونده‌ای ثبت نشده است.
+            پرونده خودرو پیدا نشد.
           </h2>
 
         </div>
@@ -157,13 +199,29 @@ function CarProfile() {
 
     );
 
+
   }
 
 
 
 
 
+
+
+  const lastService = services.length > 0
+
+    ? services[0]
+
+    : null;
+
+
+
+
+
+
+
   return (
+
 
     <div className="profile-page">
 
@@ -172,15 +230,166 @@ function CarProfile() {
 
 
 
-        <h1 className="profile-logo">
+
+
+        <div className="profile-logo">
+
           کارنگار
-        </h1>
+
+        </div>
 
 
 
-        <h2>
-          پرونده دیجیتال خودرو
-        </h2>
+
+
+
+
+        <div className="vehicle-hero">
+
+
+
+          <div className="car-icon">
+
+            🚗
+
+          </div>
+
+
+
+          <h1>
+
+            {car.brand}
+
+          </h1>
+
+
+
+          <h2>
+
+            {car.model}
+
+          </h2>
+
+
+
+
+          <div className="vehicle-meta">
+
+
+            <span>
+
+              {car.production_year_solar}
+
+            </span>
+
+
+
+            <span>
+
+              {car.color}
+
+            </span>
+
+
+
+          </div>
+
+
+
+
+          <div className="active-badge">
+
+            ✓ پرونده فعال
+
+          </div>
+
+
+
+        </div>
+
+
+
+
+
+
+
+
+
+        <div className="summary-card">
+
+
+          <h3>
+
+            وضعیت خودرو
+
+          </h3>
+
+
+
+
+          <div className="summary-item">
+
+
+            <span>
+              تعداد سرویس‌ها
+            </span>
+
+
+            <strong>
+
+              {services.length}
+
+            </strong>
+
+
+          </div>
+
+
+
+
+
+
+          <div className="summary-item">
+
+
+            <span>
+              آخرین سرویس
+            </span>
+
+
+
+            <strong>
+
+
+              {
+
+                lastService
+
+                ?
+
+                lastService.service_type
+
+                :
+
+                "ثبت نشده"
+
+              }
+
+
+            </strong>
+
+
+          </div>
+
+
+
+
+
+        </div>
+
+
+
+
 
 
 
@@ -189,48 +398,77 @@ function CarProfile() {
         <div className="car-info">
 
 
+          <h3>
+
+            اطلاعات خودرو
+
+          </h3>
+
+
+
           <div>
-            <span>برند:</span>
+
+            <span>
+              برند:
+            </span>
+
             {car.brand}
+
           </div>
 
 
 
+
           <div>
-            <span>مدل:</span>
+
+            <span>
+              مدل:
+            </span>
+
             {car.model}
+
           </div>
 
 
 
 
+
           <div>
-            <span>سال تولید شمسی:</span>
+
+            <span>
+              سال تولید:
+            </span>
+
             {car.production_year_solar}
+
           </div>
 
 
 
 
-          <div>
-            <span>سال تولید میلادی:</span>
-            {car.production_year_gregorian}
-          </div>
-
-
-
 
           <div>
-            <span>رنگ:</span>
+
+            <span>
+              رنگ:
+            </span>
+
             {car.color}
+
           </div>
+
 
 
 
 
           <div>
-            <span>شماره شاسی:</span>
+
+            <span>
+              VIN:
+            </span>
+
             {car.vin}
+
           </div>
 
 
@@ -241,11 +479,129 @@ function CarProfile() {
 
 
 
-        <div className="status">
 
-          ✅ پرونده خودرو فعال است
+
+
+
+        <div className="service-history">
+
+
+          <h3>
+
+            تاریخچه سرویس‌ها
+
+          </h3>
+
+
+
+
+
+          {
+
+            services.length === 0 ?
+
+
+            (
+
+              <p>
+
+                هنوز سرویسی ثبت نشده است.
+
+              </p>
+
+
+            )
+
+
+            :
+
+
+            (
+
+              services.map((service)=>(
+
+
+                <div
+
+                  key={service.id}
+
+                  className="service-box"
+
+
+                >
+
+
+
+                  <strong>
+
+                    🔧 {service.service_type}
+
+                  </strong>
+
+
+
+
+                  <p>
+
+                    کیلومتر:
+
+                    {" "}
+
+                    {service.mileage}
+
+                  </p>
+
+
+
+
+
+                  <p>
+
+                    {service.description}
+
+                  </p>
+
+
+
+                </div>
+
+
+              ))
+
+
+            )
+
+
+          }
+
+
 
         </div>
+
+
+
+
+
+
+
+
+        <button
+
+          className="continue-btn"
+
+          onClick={() =>
+
+            navigate(`/add-service/${car.id}`)
+
+          }
+
+        >
+
+          + ثبت سرویس جدید
+
+        </button>
+
+
 
 
 
@@ -254,6 +610,7 @@ function CarProfile() {
 
 
     </div>
+
 
   );
 

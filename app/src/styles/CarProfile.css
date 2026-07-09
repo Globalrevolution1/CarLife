@@ -1,0 +1,405 @@
+.profile-page {
+
+  min-height: 100vh;
+  direction: rtl;
+
+  background:
+    radial-gradient(
+      circle at top,
+      #17355f,
+      #071a33 55%
+    );
+
+  padding: 20px;
+
+  display: flex;
+  justify-content: center;
+
+  font-family: "Vazirmatn", sans-serif;
+
+}
+
+
+
+.profile-card {
+
+  width:100%;
+
+  max-width:430px;
+
+  background:#fdfdfd;
+
+  border-radius:32px;
+
+  padding:25px 20px 30px;
+
+  box-shadow:
+    0 25px 70px rgba(0,0,0,.35);
+
+}
+
+
+
+
+
+
+
+.profile-logo {
+
+  text-align:center;
+
+  color:#c9a227;
+
+  font-size:38px;
+
+  font-weight:900;
+
+  margin-bottom:20px;
+
+}
+
+
+
+
+
+
+
+.vehicle-hero {
+
+  background:
+
+    linear-gradient(
+      145deg,
+      #071a33,
+      #163761
+    );
+
+  border-radius:28px;
+
+  padding:28px 20px;
+
+  text-align:center;
+
+  color:white;
+
+  box-shadow:
+
+    0 15px 35px rgba(7,26,51,.35);
+
+}
+
+
+
+.car-icon {
+
+  font-size:55px;
+
+  margin-bottom:10px;
+
+}
+
+
+
+.vehicle-hero h1 {
+
+  margin:5px;
+
+  font-size:28px;
+
+}
+
+
+
+.vehicle-hero h2 {
+
+  margin:5px;
+
+  color:#e6c75a;
+
+  font-size:22px;
+
+}
+
+
+
+.vehicle-meta {
+
+  display:flex;
+
+  justify-content:center;
+
+  gap:12px;
+
+  margin-top:20px;
+
+}
+
+
+
+.vehicle-meta span {
+
+  background:rgba(255,255,255,.15);
+
+  padding:8px 18px;
+
+  border-radius:30px;
+
+}
+
+
+
+
+
+.active-badge {
+
+  margin-top:20px;
+
+  background:#c9a227;
+
+  color:white;
+
+  padding:12px;
+
+  border-radius:20px;
+
+  font-weight:bold;
+
+}
+
+
+
+
+
+
+
+
+
+.summary-card {
+
+  margin-top:25px;
+
+  background:#f6f7fa;
+
+  border-radius:25px;
+
+  padding:20px;
+
+}
+
+
+
+.summary-card h3 {
+
+  color:#071a33;
+
+  margin-top:0;
+
+}
+
+
+
+
+
+.summary-item {
+
+  display:flex;
+
+  justify-content:space-between;
+
+  align-items:center;
+
+  background:white;
+
+  padding:15px;
+
+  margin-top:12px;
+
+  border-radius:18px;
+
+}
+
+
+
+.summary-item span {
+
+  color:#666;
+
+}
+
+
+
+.summary-item strong {
+
+  color:#071a33;
+
+}
+
+
+
+
+
+
+
+
+
+.car-info {
+
+  margin-top:25px;
+
+}
+
+
+
+.car-info h3 {
+
+  color:#071a33;
+
+}
+
+
+
+.car-info div {
+
+  background:white;
+
+  padding:15px;
+
+  margin-top:10px;
+
+  border-radius:16px;
+
+  box-shadow:
+
+    0 5px 15px rgba(0,0,0,.05);
+
+}
+
+
+
+
+
+.car-info span {
+
+  color:#071a33;
+
+  font-weight:700;
+
+  margin-left:8px;
+
+}
+
+
+
+
+
+
+
+
+
+.service-history {
+
+  margin-top:30px;
+
+}
+
+
+
+.service-history h3 {
+
+  color:#071a33;
+
+}
+
+
+
+
+
+
+
+.service-box {
+
+  position:relative;
+
+  margin-top:15px;
+
+  padding:20px;
+
+  background:white;
+
+  border-radius:22px;
+
+  border-right:
+
+    5px solid #c9a227;
+
+  box-shadow:
+
+    0 8px 20px rgba(0,0,0,.08);
+
+}
+
+
+
+
+
+.service-box strong {
+
+  color:#071a33;
+
+  font-size:18px;
+
+}
+
+
+
+.service-box p {
+
+  color:#555;
+
+  margin:10px 0 0;
+
+}
+
+
+
+
+
+
+
+
+
+.continue-btn {
+
+  width:100%;
+
+  margin-top:30px;
+
+  padding:17px;
+
+  border:none;
+
+  border-radius:20px;
+
+  background:
+
+    linear-gradient(
+      135deg,
+      #c9a227,
+      #e7ca63
+    );
+
+  color:white;
+
+  font-size:18px;
+
+  font-weight:bold;
+
+  font-family:"Vazirmatn",sans-serif;
+
+  cursor:pointer;
+
+  box-shadow:
+
+    0 10px 25px rgba(201,162,39,.35);
+
+}
