@@ -16,6 +16,8 @@ function CarProfile() {
 
   const [services, setServices] = useState([]);
 
+  const [serviceTemplates, setServiceTemplates] = useState([]);
+
   const [loading, setLoading] = useState(true);
 
 
@@ -129,11 +131,37 @@ function CarProfile() {
 
     if (!servicesError) {
 
-      setServices(
+      setServices(servicesData);
 
-        servicesData
+    }
 
-      );
+
+
+
+
+    const {
+
+      data: templateData,
+
+      error: templateError
+
+    } = await supabase
+
+      .from("service_templates")
+
+      .select("*")
+
+      .eq("brand", data.brand)
+
+      .eq("model", data.model);
+
+
+
+
+
+    if (!templateError) {
+
+      setServiceTemplates(templateData);
 
     }
 
@@ -213,6 +241,7 @@ function CarProfile() {
     ? services[0]
 
     : null;
+
 
 
 
@@ -349,6 +378,8 @@ function CarProfile() {
 
 
 
+
+
           <div className="summary-item">
 
 
@@ -383,6 +414,85 @@ function CarProfile() {
 
 
 
+
+
+        </div>
+
+
+
+
+
+
+
+
+
+        <div className="service-template-card">
+
+
+          <h3>
+
+            🔔 برنامه نگهداری پیشنهادی
+
+          </h3>
+
+
+
+          {
+
+            serviceTemplates.length === 0 ?
+
+
+            (
+
+              <p>
+
+                برای این خودرو برنامه سرویس ثبت نشده است.
+
+              </p>
+
+            )
+
+
+            :
+
+
+            (
+
+              serviceTemplates.map((item)=>(
+
+
+                <div
+
+                  key={item.id}
+
+                  className="template-item"
+
+                >
+
+
+                  <span>
+
+                    {item.service_name}
+
+                  </span>
+
+
+
+                  <strong>
+
+                    هر {item.interval_km.toLocaleString()} کیلومتر
+
+                  </strong>
+
+
+                </div>
+
+
+              ))
+
+            )
+
+          }
 
 
         </div>

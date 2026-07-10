@@ -16,6 +16,7 @@ function CarRegister() {
     production_year_solar: "",
     vin: "",
     color: "",
+    current_mileage: "",
   });
 
 
@@ -111,9 +112,13 @@ function CarRegister() {
 
           color: car.color,
 
+          current_mileage:
+            Number(car.current_mileage),
+
         })
         .select()
         .single();
+
 
 
 
@@ -139,10 +144,12 @@ function CarRegister() {
 
 
 
+
       console.log(
         "CREATED VEHICLE:",
         vehicle
       );
+
 
 
 
@@ -159,6 +166,7 @@ function CarRegister() {
           owner_id: user.id,
 
         });
+
 
 
 
@@ -187,7 +195,9 @@ function CarRegister() {
 
 
 
-      navigate("/car-profile");
+
+      navigate(`/car-profile/${vehicle.id}`);
+
 
 
 
@@ -212,6 +222,8 @@ function CarRegister() {
     setLoading(false);
 
   }
+
+
 
 
 
@@ -244,6 +256,7 @@ function CarRegister() {
 
 
 
+
         <div className="form-group">
 
           <label>
@@ -263,6 +276,8 @@ function CarRegister() {
           />
 
         </div>
+
+
 
 
 
@@ -292,6 +307,8 @@ function CarRegister() {
 
 
 
+
+
         <div className="form-group">
 
           <label>
@@ -311,6 +328,8 @@ function CarRegister() {
           />
 
         </div>
+
+
 
 
 
@@ -340,6 +359,8 @@ function CarRegister() {
 
 
 
+
+
         <div className="form-group">
 
           <label>
@@ -359,6 +380,33 @@ function CarRegister() {
           />
 
         </div>
+
+
+
+
+
+
+
+        <div className="form-group">
+
+          <label>
+            کیلومتر فعلی خودرو
+          </label>
+
+          <input
+
+            name="current_mileage"
+
+            value={car.current_mileage}
+
+            onChange={handleChange}
+
+            placeholder="مثلاً 85000"
+
+          />
+
+        </div>
+
 
 
 
