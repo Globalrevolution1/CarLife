@@ -8,6 +8,7 @@ import CarProfile from "./pages/CarProfile";
 import AddService from "./pages/AddService";
 import SupabaseTest from "./pages/SupabaseTest";
 
+
 function App() {
 
   return (
@@ -16,40 +17,48 @@ function App() {
 
       <Routes>
 
-        <Route
-          path="/"
-          element={<Login />}
+
+        <Route 
+          path="/" 
+          element={<Login />} 
         />
 
-        <Route
-          path="/owner-register"
-          element={<OwnerRegister />}
+
+        <Route 
+          path="/owner-register" 
+          element={<OwnerRegister />} 
         />
 
-        <Route
-          path="/dashboard"
-          element={<OwnerDashboard />}
+
+        <Route 
+          path="/dashboard" 
+          element={<OwnerDashboard />} 
         />
 
-        <Route
-          path="/car-register"
-          element={<CarRegister />}
+
+        <Route 
+          path="/car-register" 
+          element={<CarRegister />} 
         />
 
-        <Route
-          path="/car-profile/:id"
-          element={<CarProfile />}
+
+        <Route 
+          path="/car-profile/:id" 
+          element={<CarProfile />} 
         />
 
-        <Route
-          path="/add-service/:id"
-          element={<AddService />}
+
+        <Route 
+          path="/add-service/:id" 
+          element={<AddService />} 
         />
 
-        <Route
-          path="/test"
-          element={<SupabaseTest />}
+
+        <Route 
+          path="/test" 
+          element={<SupabaseTest />} 
         />
+
 
       </Routes>
 
@@ -58,5 +67,6 @@ function App() {
   );
 
 }
+
 
 export default App;
