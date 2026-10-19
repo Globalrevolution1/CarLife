@@ -80,9 +80,8 @@ function OwnerRegister() {
 
 
 
-    } catch (err) {
+    } catch {
 
-      console.log(err);
       setError("خطایی در ثبت نام رخ داد.");
 
     }

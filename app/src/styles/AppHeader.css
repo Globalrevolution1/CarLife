@@ -1,0 +1,53 @@
+.app-header {
+  margin-bottom: 20px;
+}
+
+.app-header-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  padding: 12px 16px;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #d4af37, #f5d97b);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+}
+
+.app-header-title {
+  color: #071a33;
+  margin: 0;
+  font-size: 20px;
+}
+
+.app-header-logout {
+  background: #f1f3f5;
+  color: #333;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: "Vazirmatn", sans-serif;
+  font-size: 14px;
+  border: none;
+  transition: background 0.2s ease;
+}
+
+.app-header-logout:hover {
+  background: #e0e0e0;
+}

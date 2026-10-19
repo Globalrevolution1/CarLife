@@ -1,7 +1,41 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import AppHeader from "../components/AppHeader";
+import {
+  getLatestService as engineGetLatestService,
+  getOverallHealth as engineGetOverallHealth,
+  getUpcomingServices as engineGetUpcomingServices,
+} from "../utils/vehicleHealthEngine";
 import "./../styles/OwnerDashboard.css";
+
+
+const HEALTH_ICON = {
+  good: "🟢",
+  warning: "🟡",
+  danger: "🔴",
+  unknown: "⚪",
+};
+
+
+function formatNumber(value) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return "—";
+
+  }
+
+
+  return Number(value).toLocaleString(
+    "en-US"
+  );
+
+}
 
 
 function OwnerDashboard() {
@@ -9,220 +43,248 @@ function OwnerDashboard() {
   const navigate = useNavigate();
 
   const [vehicles, setVehicles] = useState([]);
-
+  const [serviceTemplates, setServiceTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
+
+  // =========================================================
+  // LOAD VEHICLES
+  //
+  // با useCallback تعریف می‌شود تا useEffect به یک مرجع
+  // پایدار وصل بماند (رفع react-hooks/immutability).
+  // =========================================================
+
+  const loadVehicles = useCallback(async () => {
+
+    try {
+
+      const {
+        data: {
+          user
+        }
+      } = await supabase.auth.getUser();
+
+
+      if (!user) {
+
+        navigate("/");
+
+        return;
+
+      }
+
+
+      const {
+        data,
+        error
+      } = await supabase
+
+        .from("vehicle_ownerships")
+
+        .select(`
+          vehicles (
+            id,
+            brand,
+            model,
+            production_year_solar,
+            color,
+            current_mileage,
+            services (
+              id,
+              title,
+              service_date,
+              mileage,
+              description,
+              verification_status
+            )
+          )
+        `)
+
+        .eq("owner_id", user.id);
+
+
+      let validVehicles = [];
+
+
+      if (error) {
+
+        setVehicles([]);
+
+      } else {
+
+        validVehicles = data
+          .map(function (item) {
+            return item.vehicles;
+          })
+          .filter(function (vehicle) {
+            return vehicle !== null;
+          });
+
+
+        setVehicles(validVehicles);
+
+      }
+
+
+      // -----------------------------------------------------
+      // SERVICE TEMPLATES
+      //
+      // برای اینکه Health و «سرویس بعدی» در داشبورد
+      // از همان template های پروندهٔ خودرو استفاده کنند
+      // و از آستانه‌های هاردکد خارج شوند.
+      //
+      // نکتهٔ مهم: یک کوئری برای کل جدول می‌زنیم، نه یک کوئری
+      // به ازای هر جفت (brand, model). دو دلیل:
+      //   ۱) ردیف‌های «عمومی» (brand خالی) باید بیایند
+      //   ۲) filterTemplatesForVehicle فیلتر دقیق مدل را با
+      //      fallback به برند انجام می‌دهد؛ سمت سرور نباید
+      //      مدلی را که هنوز ردیف اختصاصی ندارد حذف کند
+      //      (وگرنه سلامتِ مدل‌های ثبت‌نشده خالی می‌ماند)
+      // -----------------------------------------------------
+
+      const {
+        data: templateData,
+      } = await supabase
+
+        .from("service_templates")
+
+        .select(`
+          id,
+          brand,
+          model,
+          service_name,
+          interval_km
+        `)
+
+        .order("interval_km", {
+          ascending: true,
+        });
+
+
+      setServiceTemplates(
+        templateData || []
+      );
+
+    } catch {
+
+      setVehicles([]);
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  }, [navigate]);
 
 
   useEffect(() => {
 
+    // fetch-on-mount است و setState ها همگی بعد از await
+    // اتفاق می‌افتند؛ قاعدهٔ set-state-in-effect این را
+    // به‌صورت محافظه‌کارانه خطا می‌گیرد.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadVehicles();
 
-  }, []);
+  }, [loadVehicles]);
 
 
+  function getLastService(car) {
 
-  async function loadVehicles() {
-
-
-    const {
-      data:{user}
-    } = await supabase.auth.getUser();
-
-
-
-    if(!user){
-
-      navigate("/");
-      return;
-
-    }
-
-
-
-    const {data,error}=await supabase
-    .from("vehicle_ownerships")
-    .select(`
-      vehicles(
-        id,
-        brand,
-        model,
-        production_year_solar,
-        color,
-        current_mileage,
-        services(
-          id,
-          title,
-          service_date,
-          mileage,
-          description,
-          verification_status
-        )
-      )
-    `)
-    .eq("owner_id",user.id);
-
-
-
-    if(error){
-
-      console.log(error);
-
-    }else{
-
-
-      setVehicles(
-        data.map(item=>item.vehicles)
-      );
-
-    }
-
-
-
-    setLoading(false);
+    return engineGetLatestService(
+      car?.services
+    );
 
   }
 
 
+  function getHealth(car) {
+
+const health =
+      engineGetOverallHealth({
+        templates: serviceTemplates,
+        services: car?.services || [],
+        currentMileage:
+          car?.current_mileage || 0,
+        vehicle: car,
+        formatNumber,
+      });
 
 
-
-  function getLastService(car){
-
-    if(!car.services || car.services.length===0)
-      return null;
-
-
-    return [...car.services]
-    .sort(
-      (a,b)=>
-      new Date(b.service_date)-new Date(a.service_date)
-    )[0];
-
-  }
-
-
-
-
-
-  function getHealth(car){
-
-
-    const last=getLastService(car);
-
-
-
-    if(!last){
+    if (
+      health.score === null
+    ) {
 
       return {
-
-        percent:70,
-
-        text:"🟡 اطلاعات سرویس کافی نیست"
-
+        percent: null,
+        text:
+          `⚪ ${health.label}`,
+        className: health.className,
       };
 
     }
-
-
-
-    const current =
-    car.current_mileage || 0;
-
-
-    const lastKm =
-    last.mileage || 0;
-
-
-    const distance =
-    current-lastKm;
-
-
-
-    if(distance >= 9000){
-
-      return {
-
-        percent:65,
-
-        text:"🔴 نیاز به سرویس"
-
-      };
-
-    }
-
-
-
-    if(distance >= 7000){
-
-      return {
-
-        percent:80,
-
-        text:"🟡 سرویس نزدیک است"
-
-      };
-
-    }
-
 
 
     return {
-
-      percent:95,
-
-      text:"🟢 عالی"
-
+      percent: health.score,
+      text:
+        `${HEALTH_ICON[health.className]} ${health.label}`,
+      className: health.className,
     };
 
+  }
+
+
+  function getNextService(car) {
+
+const upcoming =
+      engineGetUpcomingServices({
+        templates: serviceTemplates,
+        services: car?.services || [],
+        currentMileage:
+          car?.current_mileage || 0,
+        vehicle: car,
+        formatNumber,
+      });
+
+
+    if (
+      upcoming.length === 0
+    ) {
+
+      const hasHistory =
+        engineGetLatestService(
+          car?.services
+        ) !== null;
+
+
+      return hasHistory
+        ? "نیاز به سرویس"
+        : "ثبت نشده";
+
+    }
+
+
+    return (
+      formatNumber(
+        upcoming[0].status.remaining
+      ) + " km دیگر"
+    );
+
+  }
+
+  function openCarProfile(carId) {
+
+    navigate(
+      "/car-profile/" + carId
+    );
 
   }
 
 
+  if (loading) {
 
-
-
-
-
-  function getNextService(car){
-
-
-    const last=getLastService(car);
-
-
-    if(!last || !last.mileage)
-      return "ثبت نشده";
-
-
-
-    const next =
-    last.mileage + 10000;
-
-
-
-    const remain =
-    next-(car.current_mileage || 0);
-
-
-
-    if(remain<=0)
-
-      return "نیاز به سرویس";
-
-
-    return remain.toLocaleString()+" km دیگر";
-
-
-  }
-
-
-
-
-
-
-  if(loading){
-
-    return(
+    return (
 
       <div className="dashboard-page">
 
@@ -241,288 +303,270 @@ function OwnerDashboard() {
   }
 
 
-
-
-
-
-  return(
-
+  return (
 
     <div className="dashboard-page">
-
 
       <div className="dashboard-card">
 
 
+        <AppHeader />
+
 
         <div className="dashboard-header">
-
-
-          <h1>
-            کارنگار
-          </h1>
-
 
           <p>
             وضعیت خودروهای من
           </p>
 
-
         </div>
 
 
-
-
-
         {
+          vehicles.length === 0 ? (
 
-        vehicles.map((car)=>{
+            <div className="empty-box">
 
-
-          const health=getHealth(car);
-
-          const last=getLastService(car);
-
-
-
-          return(
-
-
-          <div
-
-          key={car.id}
-
-          className="vehicle-box"
-
-          onClick={()=>navigate(`/car-profile/${car.id}`)}
-
-          >
-
-
-
-
-
-            <div className="vehicle-top">
-
-
-              <div className="vehicle-icon">
-
+              <div className="empty-icon">
                 🚗
-
               </div>
 
+              <h3>
+                هنوز خودرویی ثبت نشده است
+              </h3>
 
-
-              <div>
-
-                <h3>
-
-                  {car.brand}
-
-                </h3>
-
-
-                <h4>
-
-                  {car.model}
-
-                </h4>
-
-
-              </div>
-
+              <p>
+                اولین خودرو را ثبت کنید تا پرونده دیجیتال آن ساخته شود.
+              </p>
 
             </div>
 
+          ) : (
 
+            vehicles.map(function (car) {
 
+              const health =
+                getHealth(car);
 
+              const lastService =
+                getLastService(car);
 
 
-            <div className="health-box">
+              return (
 
+                <div
+                  key={car.id}
+                  className="vehicle-box"
+                  onClick={function () {
+                    openCarProfile(car.id);
+                  }}
+                >
 
-              <span>
-                وضعیت خودرو
-              </span>
 
+                  <div className="vehicle-top">
 
-              <strong>
 
-                {health.text}
+                    <div className="vehicle-icon">
+                      🚗
+                    </div>
 
-              </strong>
 
+                    <div>
 
-              <small>
+                      <h3>
+                        {car.brand}
+                      </h3>
 
-                سلامت خودرو {health.percent}%
+                      <h4>
+                        {car.model}
+                      </h4>
 
-              </small>
+                    </div>
 
 
-            </div>
+                  </div>
 
 
+                  <div className="health-box">
 
+                    <span>
+                      وضعیت خودرو
+                    </span>
 
+                    <strong>
+                      {health.text}
+                    </strong>
 
+                    <small>
 
+                      {
+                        health.percent !== null
+                          ? `سلامت خودرو ${health.percent}%`
+                          : "سلامت خودرو نامشخص"
+                      }
 
-            <div className="service-box">
+                    </small>
 
+                  </div>
 
-              <span>
-                آخرین سرویس
-              </span>
 
+                  <div className="service-box">
 
-              <strong>
+                    <span>
+                      آخرین سرویس
+                    </span>
 
-                {
-                  last
-                  ?
-                  last.title
-                  :
-                  "ثبت نشده"
+                    <strong>
 
-                }
+                      {
+                        lastService
+                          ? lastService.title
+                          : "ثبت نشده"
+                      }
 
-              </strong>
+                    </strong>
 
 
+                    {
+                      lastService && (
 
-              {
+                        <small>
 
-                last &&
+                          {
+                            lastService.mileage
+                              ? Number(
+                                  lastService.mileage
+                                ).toLocaleString() + " km"
+                              : "کیلومتر ثبت نشده"
+                          }
 
-                <small>
+                        </small>
 
-                  {last.mileage?.toLocaleString()} km
+                      )
+                    }
 
-                </small>
+                  </div>
 
-              }
 
+                  <div className="service-box">
 
-            </div>
+                    <span>
+                      سرویس بعدی
+                    </span>
 
+                    <strong>
+                      {getNextService(car)}
+                    </strong>
 
+                  </div>
 
 
+                  <div className="vehicle-details">
 
 
-            <div className="service-box">
+                    <div>
 
+                      <span>
+                        کیلومتر فعلی
+                      </span>
 
-              <span>
-                سرویس بعدی
-              </span>
+                      <strong>
 
+                        {
+                          Number(
+                            car.current_mileage || 0
+                          ).toLocaleString()
+                        }
 
-              <strong>
+                        {" km"}
 
-                {getNextService(car)}
+                      </strong>
 
-              </strong>
+                    </div>
 
 
-            </div>
+                    <div>
 
+                      <span>
+                        سال
+                      </span>
 
+                      <strong>
+                        {car.production_year_solar}
+                      </strong>
 
+                    </div>
 
 
+                    <div>
 
+                      <span>
+                        رنگ
+                      </span>
 
+                      <strong>
+                        {car.color}
+                      </strong>
 
-            <div className="vehicle-details">
+                    </div>
 
 
-              <div>
+                  </div>
 
-                <span>
-                  کیلومتر فعلی
-                </span>
 
+                </div>
 
-                <strong>
+              );
 
-                  {(car.current_mileage || 0)
-                  .toLocaleString()} km
+            })
 
-                </strong>
-
-
-              </div>
-
-
-
-
-
-              <div>
-
-                <span>
-                  سال
-                </span>
-
-
-                <strong>
-
-                  {car.production_year_solar}
-
-                </strong>
-
-
-              </div>
-
-
-
-            </div>
-
-
-
-
-
-          </div>
-
-
-          );
-
-
-        })
-
+          )
         }
 
 
-
-
-
-
-
         <button
-
-        className="continue-btn"
-
-        onClick={()=>navigate("/car-register")}
-
+          className="continue-btn"
+          onClick={function () {
+            navigate("/car-register");
+          }}
         >
-
-        + ثبت خودروی جدید
-
+          + ثبت خودروی جدید
         </button>
 
 
+        <button
+          className="continue-btn"
+          onClick={function () {
+            navigate("/center-register");
+          }}
+          style={{
+            marginTop: "12px",
+            background: "#071a33",
+          }}
+        >
+          🔧 مرکز خدمات
+        </button>
+
+
+        <button
+          className="continue-btn"
+          onClick={function () {
+            navigate("/transfer");
+          }}
+          style={{
+            marginTop: "12px",
+            background: "#071a33",
+          }}
+        >
+          🔑 دریافت پرونده با کد انتقال
+        </button>
 
 
       </div>
 
-
     </div>
 
-
   );
-
 
 }
 

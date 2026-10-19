@@ -1,0 +1,22 @@
+{
+  "name": "کارنگار — پرونده دیجیتال خودرو",
+  "short_name": "کارنگار",
+  "description": "پرونده دیجیتال مادام‌العمر خودرو: یادآوری سرویس‌های دوره‌ای، تاریخچه نگهداری و تأیید توسط مرکز خدمات.",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F7FA",
+  "theme_color": "#071A33",
+  "categories": ["auto", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

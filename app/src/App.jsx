@@ -6,7 +6,15 @@ import OwnerDashboard from "./pages/OwnerDashboard";
 import CarRegister from "./pages/CarRegister";
 import CarProfile from "./pages/CarProfile";
 import AddService from "./pages/AddService";
-import SupabaseTest from "./pages/SupabaseTest";
+import CenterRegister from "./pages/CenterRegister";
+import CenterPanel from "./pages/CenterPanel";
+import CarEdit from "./pages/CarEdit";
+import TransferClaim from "./pages/TransferClaim";
+import ProtectedRoute from "./components/ProtectedRoute";
+
+// صفحهٔ دیباگ /test و فایل‌های بلااستفاده (SupabaseTest, Dashboard,
+// ServiceRegister, App.css) حذف شدند تا چیزی از بیرون در دسترس نباشد
+// و در build نیاید.
 
 
 function App() {
@@ -17,6 +25,8 @@ function App() {
 
       <Routes>
 
+
+        {/* صفحه‌های عمومی: نیازی به ورود ندارند */}
 
         <Route 
           path="/" 
@@ -30,33 +40,93 @@ function App() {
         />
 
 
+        {/* صفحه‌های خصوصی: بدون ورود به صفحهٔ ورود می‌روند */}
+
         <Route 
           path="/dashboard" 
-          element={<OwnerDashboard />} 
+          element={
+            <ProtectedRoute>
+              <OwnerDashboard />
+            </ProtectedRoute>
+          } 
         />
 
 
         <Route 
           path="/car-register" 
-          element={<CarRegister />} 
+          element={
+            <ProtectedRoute>
+              <CarRegister />
+            </ProtectedRoute>
+          } 
         />
 
 
         <Route 
           path="/car-profile/:id" 
-          element={<CarProfile />} 
+          element={
+            <ProtectedRoute>
+              <CarProfile />
+            </ProtectedRoute>
+          } 
+        />
+
+
+        <Route 
+          path="/car-edit/:id" 
+          element={
+            <ProtectedRoute>
+              <CarEdit />
+            </ProtectedRoute>
+          } 
         />
 
 
         <Route 
           path="/add-service/:id" 
-          element={<AddService />} 
+          element={
+            <ProtectedRoute>
+              <AddService />
+            </ProtectedRoute>
+          } 
         />
 
 
         <Route 
-          path="/test" 
-          element={<SupabaseTest />} 
+          path="/center-register" 
+          element={
+            <ProtectedRoute>
+              <CenterRegister />
+            </ProtectedRoute>
+          } 
+        />
+
+
+        <Route 
+          path="/center-panel" 
+          element={
+            <ProtectedRoute>
+              <CenterPanel />
+            </ProtectedRoute>
+          } 
+        />
+
+
+        <Route 
+          path="/transfer" 
+          element={
+            <ProtectedRoute>
+              <TransferClaim />
+            </ProtectedRoute>
+          } 
+        />
+
+
+        {/* هر مسیر ناشناخته به ورود برمی‌گردد */}
+
+        <Route 
+          path="*" 
+          element={<Login />} 
         />
 
 

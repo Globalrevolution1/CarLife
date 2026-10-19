@@ -1,0 +1,208 @@
+================================================================
+ CARNGAR — ACTUAL LIVE SCHEMA (2026-10-05)
+================================================================
+Project ref : ezcdjwthdptfnyialjpw
+Extraction  : PostgREST error probing with the public anon key.
+              No database password, no session, read-only.
+              Method: PGRST205 = table missing,
+                      PGRST/42703 = column missing.
+              This did NOT read any private row.
+Evidence    : live responses only, nothing inferred.
+
+LEGEND
+  [x] exists and is covered by a Git migration
+  [!!] exists in live DB but NOT in any Git migration
+  [?]  zero policies in Git migrations -> app is broken
+
+----------------------------------------------------------------
+ vehicles  (11 columns)
+----------------------------------------------------------------
+  [!!] current_mileage        integer   nullable
+   [x] id                      uuid
+   [x] brand                   text
+   [x] model                   text
+   [x] color                   text
+   [x] vin                     text
+   [x] production_year         smallint
+   [x] production_year_gregorian smallint
+   [x] production_year_solar   smallint
+   [x] created_at              timestamptz
+   [x] updated_at              timestamptz
+
+  NO owner_id / user_id column. Ownership lives only in
+  vehicle_ownerships, so every policy must join to it.
+
+----------------------------------------------------------------
+ service_templates  (6 columns)   <-- ENTIRE TABLE MISSING IN GIT
+----------------------------------------------------------------
+  [!!] id                      uuid      pk
+  [!!] brand                   text      not null
+  [!!] model                   text      not null
+  [!!] service_name            text      not null
+  [!!] interval_km             integer   not null check > 0
+  [!!] created_at              timestamptz
+
+  RLS : ENABLED, and a SELECT policy exists
+        (anon can read, anon INSERT is blocked with 42501).
+        This is the only table with a hand-made policy.
+
+  ROWS: 10
+    brand    model        service_name          interval_km
+    پژو      206 تیپ 2    فیلتر روغن              10000
+    پژو      206 تیپ 2    تعویض روغن موتور         10000
+    پژو      206 تیپ 2    فیلتر هوا                15000
+    پژو      206 تیپ 2    فیلتر کابین              15000
+    پژو      206 تیپ 2    روغن گیربکس              50000
+    پژو      206 تیپ 2    شمع                      50000
+    پژو      206 تیپ 2    تسمه تایم                60000
+    لکسوس    ls460L        تعویض روغن گیربکس         5000
+    لکسوس    ls460L        تعویض روغن               10000
+    لکسوس    ls460L        تعویض فیلتر هوا          20000
+
+  >> TEMPLATES ARE MODEL-SPECIFIC, NOT BRAND-WIDE. <<
+     Filtering by brand alone crosses the intervals of two
+     different cars. This was a live bug in OwnerDashboard.
+
+  >> DATA INCONSISTENCY: <<
+     "روغن گیربکس" (پژو) and "تعویض روغن گیربکس" (لکسوس)
+     normalise to two DIFFERENT strings, so the engine will not
+     match a manually entered Lexus gearbox service to the
+     Lexus template.
+
+----------------------------------------------------------------
+ services  (12 columns)
+----------------------------------------------------------------
+   [x] id                      uuid
+   [x] vehicle_id              uuid
+   [x] created_by              uuid
+   [x] title                   text
+   [x] description             text
+   [x] service_date            date
+   [x] mileage                 integer
+   [x] cost                    numeric
+   [x] service_center_id       uuid
+   [x] verification_status     text
+   [x] created_at              timestamptz
+   [x] updated_at              timestamptz
+
+  [?] migration 005 enables RLS but defines NO policy.
+      Anon INSERT -> 42501. Authenticated behaviour unknown
+      without SQL: either the whole feature is dead, or a
+      hand-made policy exists in the Dashboard.
+
+----------------------------------------------------------------
+ vehicle_ownerships  (6 columns)
+----------------------------------------------------------------
+   [x] id                      uuid
+   [x] vehicle_id              uuid
+   [x] owner_id                uuid
+   [x] start_date              date
+   [x] end_date                date
+   [x] created_at              timestamptz
+
+  Policies from migration 008, verified by name:
+    "Users can create ownership"              insert
+    "Users can view own ownership history"     select
+
+----------------------------------------------------------------
+ service_items  (6 columns)
+----------------------------------------------------------------
+   [x] id                      uuid
+   [x] service_id              uuid
+   [x] name                    text
+   [x] quantity                numeric
+   [x] unit_price              numeric
+   [x] created_at              timestamptz
+
+----------------------------------------------------------------
+ vehicle_services  (7 columns)   OVERLAPS `services`
+----------------------------------------------------------------
+   [x] id                      uuid
+   [x] vehicle_id              uuid
+   [x] service_type            text
+   [x] service_date            date
+   [x] mileage                 integer
+   [x] description             text
+   [x] created_at              timestamptz
+
+  Dead table. Front-end never reads it.
+
+----------------------------------------------------------------
+ service_centers  (9 columns)
+----------------------------------------------------------------
+   [x] id                      uuid
+   [x] owner_id                uuid
+   [x] name                    text
+   [x] mobile                  text
+   [x] city                    text
+   [x] address                 text
+   [x] is_verified             boolean
+   [x] created_at              timestamptz
+   [x] updated_at              timestamptz
+
+----------------------------------------------------------------
+ profiles  (6 columns)
+----------------------------------------------------------------
+   [x] id                      uuid
+   [x] full_name               text
+   [x] mobile                  text
+   [x] role                    text
+   [x] created_at              timestamptz
+   [x] updated_at              timestamptz
+
+----------------------------------------------------------------
+ TABLES THAT DO NOT EXIST (404 PGRST205, confirmed)
+----------------------------------------------------------------
+  maintenance_templates, vehicle_reports, notifications,
+  reminders, service_records, brands, models,
+  notifications_log
+
+================================================================
+ ANON WRITE PROBE — PostgREST POST {} with the public anon key
+================================================================
+  Interpretation:
+    401/42501                 -> blocked, safe
+    400/23502 (not-null)       -> AUTHORISED, reached a
+                                   constraint = unsafe
+
+  vehicles             HTTP 400  23502 null vin   *** UNSAFE ***
+  vehicle_ownerships   HTTP 401  42501             safe
+  services             HTTP 401  42501             safe
+  service_templates    HTTP 401  42501             safe
+  service_centers      HTTP 401  42501             safe
+  service_items        HTTP 401  42501             safe
+  vehicle_services     HTTP 401  42501             safe
+  profiles             HTTP 401  42501             safe
+
+  Cause: migration 008 created "Users can insert vehicles"
+  WITHOUT `to authenticated`. No `to` clause means the policy
+  applies to PUBLIC, i.e. anon as well.
+
+================================================================
+ ANON READ PROBE — SELECT id with Prefer: count=exact
+================================================================
+  vehicles            HTTP 200  rows=0
+  vehicle_ownerships  HTTP 200  rows=0
+  services            HTTP 200  rows=0
+  service_templates   HTTP 206  rows=10   <-- public reference data
+  service_centers     HTTP 200  rows=0
+  service_items       HTTP 200  rows=0
+  vehicle_services    HTTP 200  rows=0
+  profiles            HTTP 200  rows=0
+
+  rows=0 means RLS hides every row from anon. That is correct
+  and expected for private data.
+
+================================================================
+ STILL UNKNOWNS — one SQL query answers all of them
+================================================================
+  1. Do hand-made policies exist for services,
+     service_items, vehicle_services, service_centers?
+     (auth role, not anon — anon is blocked either way, so
+      the probe above cannot distinguish "no policy" from
+      "policy restricted to authenticated")
+  2. Are there any vehicle_ownerships rows with end_date set?
+     i.e. is the former-owner leak exploitable right now?
+  3. Exact NOT NULL / CHECK / FK / UNIQUE constraints.
+  4. Row counts per table.
+================================================================

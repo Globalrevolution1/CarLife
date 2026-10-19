@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { solarToGregorianYear } from "../utils/dateConverter";
-import "./../styles/CarRegister.css";
+import AppHeader from "../components/AppHeader";
 
 
 function CarRegister() {
@@ -43,16 +43,6 @@ function CarRegister() {
     try {
 
 
-      const {
-        data: sessionData
-      } = await supabase.auth.getSession();
-
-
-      console.log(
-        "SESSION:",
-        sessionData.session
-      );
-
 
 
       const {
@@ -61,13 +51,6 @@ function CarRegister() {
         },
         error: userError
       } = await supabase.auth.getUser();
-
-
-
-      console.log(
-        "USER:",
-        user
-      );
 
 
 
@@ -92,44 +75,29 @@ function CarRegister() {
 
 
       const {
-        data: vehicle,
+        data: vehicleId,
         error: vehicleError
-      } = await supabase
-        .from("vehicles")
-        .insert({
-
-          vin: car.vin,
-
-          brand: car.brand,
-
-          model: car.model,
-
-          production_year_solar:
+      } = await supabase.rpc(
+        "register_vehicle",
+        {
+          p_vin: car.vin,
+          p_brand: car.brand,
+          p_model: car.model,
+          p_production_year_solar:
             Number(car.production_year_solar),
-
-          production_year_gregorian:
+          p_production_year_gregorian:
             gregorianYear,
-
-          color: car.color,
-
-          current_mileage:
+          p_color: car.color,
+          p_current_mileage:
             Number(car.current_mileage),
-
-        })
-        .select()
-        .single();
+        }
+      );
 
 
 
 
 
       if (vehicleError) {
-
-        console.log(
-          "VEHICLE ERROR:",
-          vehicleError
-        );
-
 
         alert(
           vehicleError.message
@@ -145,70 +113,32 @@ function CarRegister() {
 
 
 
-      console.log(
-        "CREATED VEHICLE:",
-        vehicle
-      );
 
 
 
 
 
 
-      const {
-        error: ownershipError
-      } = await supabase
-        .from("vehicle_ownerships")
-        .insert({
-
-          vehicle_id: vehicle.id,
-
-          owner_id: user.id,
-
-        });
+      // مالکیت اینجا ثبت نمی‌شود: تابع register_vehicle خودش
+      // ردیف مالکیت را با owner_id = auth.uid() می‌سازد.
 
 
 
 
 
 
-      if (ownershipError) {
-
-
-        console.log(
-          "OWNERSHIP ERROR:",
-          ownershipError
-        );
-
-
-        alert(
-          ownershipError.message
-        );
-
-
-        setLoading(false);
-        return;
-
-      }
 
 
 
 
 
 
-      navigate(`/car-profile/${vehicle.id}`);
+      navigate(`/car-profile/${vehicleId}`);
 
 
 
 
-    } catch (error) {
-
-
-      console.log(
-        "GENERAL ERROR:",
-        error
-      );
-
+    } catch {
 
       alert(
         "خطایی در ثبت خودرو رخ داد."
@@ -236,9 +166,7 @@ function CarRegister() {
       <div className="register-card">
 
 
-        <h1 className="register-logo">
-          کارنگار
-        </h1>
+        <AppHeader />
 
 
 
