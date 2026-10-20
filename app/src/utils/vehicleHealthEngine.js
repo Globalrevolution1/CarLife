@@ -364,6 +364,49 @@ function dedupeByServiceName(rows) {
 }
 
 /**
+ * حذف تکراری‌ها با ترجیح ردیفِ مدلِ دقیق.
+ *
+ * جدول سه لایه است:
+ *   عمومی  (brand خالی)      ← برای همه
+ *   برند   (model خالی)      ← برای هر مدلِ همان برند
+ *   مدل    (brand + model)   ← فقط همان خودرو
+ *
+ * وقتی خودرو مدلش ثبت است، فیلتر «exact» هم ردیف‌های مدلِ دقیق
+ * را نگه می‌دارد هم ردیف‌های برندی. اگر هر دو «شمع» داشته باشند
+ * (مدل ۵۰,۰۰۰ و برند ۶۰,۰۰۰) بدون این تابع هر دو در فهرست
+ * می‌آمدند: سرویس در فرم ثبت دو بار نشان داده می‌شد و امتیاز
+ * سلامت دو بار حساب می‌شد.
+ *
+ * برندهٔ قطعی ردیفی است که model دقیقاً با مدل خودرو یکی باشد؛
+ * ردیف برندی فقط وقتی برنده می‌شود که همان سرویس برای این مدل
+ * ردیف اختصاصی نداشته باشد.
+ *
+ * @param {Array<object>} rows
+ * @param {string} model  مدل نرمال‌شدهٔ خودرو (ممکن است خالی باشد)
+ * @returns {Array<object>}
+ */
+function dedupePreferExactModel(rows, model) {
+  const chosen = new Map();
+
+  rows.forEach((row) => {
+    const key = normalizeServiceTitle(row?.service_name);
+
+    if (!key) {
+      return;
+    }
+
+    const isExact = Boolean(model) && normalizeLabel(row?.model) === model;
+    const existing = chosen.get(key);
+
+    if (!existing || (isExact && !existing.isExact)) {
+      chosen.set(key, { row, isExact });
+    }
+  });
+
+  return Array.from(chosen.values()).map((entry) => entry.row);
+}
+
+/**
  * افزودن ردیف‌های عمومی‌ای که در فهرستِ برند/مدل نیستند.
  *
  * ردیف عمومی = template با brand خالی (قرارداد migration 016).
@@ -403,6 +446,8 @@ function mergeUniversalTemplates(specific, universal) {
  *
  * سلسله‌مراتب نزولی (هر مرحله فقط وقتی قبلی خالی بود):
  *   ۱) برند + مدل دقیق  + ردیف‌های بدون مدلِ همان برند
+ *      (اگر یک سرویس در هر دو لایه باشد، ردیفِ مدلِ دقیق برنده
+ *       است — رجوع کن به dedupePreferExactModel)
  *   ۲) ردیف‌های بدون مدلِ همان برند، وگرنه کلِ ردیف‌های برند
  *      (fallback: مدل ثبت‌شده هنوز در جدول نیست)
  *   ۳) فقط ردیف‌های عمومی (برند ناشناخته)
@@ -446,7 +491,9 @@ export function filterTemplatesForVehicle(templates, vehicle) {
 
   if (!model) {
     const base =
-      generic.length > 0 ? generic : dedupeByServiceName(sameBrand);
+      generic.length > 0
+        ? dedupePreferExactModel(generic, model)
+        : dedupeByServiceName(sameBrand);
 
     return mergeUniversalTemplates(base, universal);
   }
@@ -459,7 +506,7 @@ export function filterTemplatesForVehicle(templates, vehicle) {
 
   const scoped =
     exact.length > 0
-      ? exact
+      ? dedupePreferExactModel(exact, model)
       : dedupeByServiceName(sameBrand);
 
   return mergeUniversalTemplates(scoped, universal);

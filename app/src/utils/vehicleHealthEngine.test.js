@@ -749,3 +749,104 @@ describe("پوشش عمومی template ها", () => {
     expect(health.className).toBe("good");
   });
 });
+
+// =============================================================
+// لایهٔ برند (migration 017)
+//
+// قرارداد سه لایهٔ جدول:
+//   عمومی (brand خالی)  → همهٔ خودروها
+//   برند  (model خالی)  → هر مدلِ همان برند
+//   مدل   (brand+model) → فقط همان خودرو
+//
+// وقتی یک سرویس در دو لایه باشد، ردیفِ مدلِ دقیق باید برنده
+// شود؛ وگرنه هم در فرم ثبت سرویس دو بار نشان داده می‌شود و
+// هم امتیاز سلامت دو بار حساب می‌شود.
+// =============================================================
+
+const LAYERED_TEMPLATES = [
+  { id: "u1", brand: "", model: "", service_name: "تعویض روغن موتور", interval_km: 10000 },
+  { id: "u2", brand: "", model: "", service_name: "شمع", interval_km: 50000 },
+  { id: "b1", brand: "کیا", model: "", service_name: "شمع", interval_km: 80000 },
+  { id: "b2", brand: "کیا", model: "", service_name: "روغن گیربکس", interval_km: 60000 },
+  { id: "m1", brand: "کیا", model: "سراتو", service_name: "شمع", interval_km: 60000 },
+  { id: "m2", brand: "کیا", model: "سراتو", service_name: "تسمه تایم", interval_km: 90000 },
+];
+
+describe("لایهٔ برند در template ها", () => {
+  test("تداخل مدل و برند ← ردیف مدلِ دقیق برنده است", () => {
+    const scoped = filterTemplatesForVehicle(LAYERED_TEMPLATES, {
+      brand: "کیا",
+      model: "سراتو",
+    });
+
+    const plugs = scoped.filter(
+      (row) => normalizeServiceTitle(row.service_name) === "شمع"
+    );
+
+    expect(plugs).toHaveLength(1);
+    expect(plugs[0].id).toBe("m1");
+    expect(plugs[0].interval_km).toBe(60000);
+  });
+
+  test("سرویسِ فقط-برندی برای مدلِ دقیق هم می‌آید", () => {
+    const scoped = filterTemplatesForVehicle(LAYERED_TEMPLATES, {
+      brand: "کیا",
+      model: "سراتو",
+    });
+
+    // شمع (مدل)، روغن گیربکس (برند)، تسمه تایم (مدل) + عمومی روغن موتور
+    expect(ids(scoped).sort()).toEqual(["b2", "m1", "m2", "u1"]);
+  });
+
+  test("مدل ثبت‌نشدهٔ همان برند ← ردیف‌های برند با اینترکول برند", () => {
+    const scoped = filterTemplatesForVehicle(LAYERED_TEMPLATES, {
+      brand: "کیا",
+      model: "سلتوس",
+    });
+
+    const plugs = scoped.filter(
+      (row) => normalizeServiceTitle(row.service_name) === "شمع"
+    );
+
+    expect(plugs).toHaveLength(1);
+    expect(plugs[0].id).toBe("b1");
+    expect(plugs[0].interval_km).toBe(80000);
+    // عمومی «شمع=۵۰,۰۰۰» نباید دوباره اضافه شود.
+    expect(ids(scoped).sort()).toEqual(["b1", "b2", "u1"]);
+  });
+
+  test("هیچ عنوان سرویسی در خروجی تکرار نمی‌شود", () => {
+    const scoped = filterTemplatesForVehicle(LAYERED_TEMPLATES, {
+      brand: "کیا",
+      model: "سراتو",
+    });
+
+    const titles = scoped.map((row) => normalizeServiceTitle(row.service_name));
+    expect(new Set(titles).size).toBe(titles.length);
+  });
+
+  test("امتیاز سلامت از اینترکولِ مدل استفاده می‌کند، نه برند", () => {
+    const scoped = filterTemplatesForVehicle(LAYERED_TEMPLATES, {
+      brand: "کیا",
+      model: "سراتو",
+    });
+
+    // شمع (مدل) + روغن گیربکس (برند) + تسمه تایم (مدل) + عمومی روغن موتور
+    expect(scoped).toHaveLength(4);
+
+    const plugs = scoped.find(
+      (row) => normalizeServiceTitle(row.service_name) === "شمع"
+    );
+
+    const status = getTemplateStatus({
+      template: plugs,
+      services: [{ id: "s1", title: "شمع", mileage: 10000, service_date: "2026-06-01" }],
+      currentMileage: 61000,
+    });
+
+    // آخرین سرویس ۱۰,۰۰۰ + اینترکول مدل ۶۰,۰۰۰ = موعد ۷۰,۰۰۰ ← سالم.
+    // اگر عمومی (۵۰,۰۰۰) برنده شده بود موعد ۶۰,۰۰۰ می‌شد و «عقب‌افتاده».
+    expect(status.status).toBe("good");
+    expect(status.remaining).toBe(9000);
+  });
+});

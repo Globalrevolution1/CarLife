@@ -1,21 +1,21 @@
-# Karnegar — Status Report (2026-10-19)
+# Karnegar — Status Report (2026-10-20)
 
 ## 1. Executive Summary
 
 | Metric | Value |
 |---|---|
 | Project | Karnegar (formerly CarLife) |
-| MVP (PRD sections 2 + 5 + 6 + 9) | Frontend 100% written — **DB migrations 013/014 applied & E2E verified** |
+| MVP (PRD sections 2 + 5 + 6 + 9) | Frontend 100% written — **DB migrations 013/014/015/016/017 applied & E2E verified** |
 | Overall Progress | ~90% of PRD scope |
 | Database | Supabase (PostgreSQL) — live, RLS verified by E2E probe |
 | Auth | Supabase Auth (email/password) |
 | Frontend | React 19 + Vite 8 + React Router 7 |
 | CSS | Plain CSS per-page files |
-| Quality gates | `npm run verify` → lint 0 errors, **56 tests pass**, production build OK (88 modules) |
+| Quality gates | `npm run verify` → lint 0 errors, **68 tests pass**, production build OK (88 modules) |
 
-**No blocker.** Migrations `013`, `014` and `_cleanup_e2e_test_data.sql`
-were executed on 2026-10-19 and verified by query. The live database is back
-to its clean baseline (no test data left).
+**No blocker.** Migrations `013`–`017` were executed on the live database and
+verified by query. The live database is back to its clean baseline (no test data
+left — only the real client account).
 
 ---
 
@@ -33,16 +33,14 @@ to its clean baseline (no test data left).
 | `CenterRegister.jsx` | `/center-register` | ✅ Protected — register / already-registered state |
 | `CenterPanel.jsx` | `/center-panel` | ✅ Protected — list + `verify_service` RPC |
 | `TransferClaim.jsx` | `/transfer` | ✅ Protected — **E2E verified (claim + one-time code + old owner locked out)** |
-| `SupabaseTest.jsx` | — | 🧪 Not routed (debug leftover) |
-| `Dashboard.jsx` | — | ⚠️ 0 bytes, dead |
-| `ServiceRegister.jsx` | — | ⚠️ 0 bytes, dead |
-| `styles/CarRegister.css` | — | ⚠️ 0 bytes (imported, harmless) |
 
 Shared: `components/AppHeader.jsx` (logout on every protected page),
 `components/ProtectedRoute.jsx` (unauthenticated → `/`),
 `lib/errorMessage.js` (PostgREST messages → Persian).
 
-**Removed:** `/test` route (wildcard now returns to Login — no public debug page).
+**Removed (2026-10-19):** `/test` route; dead files `Dashboard.jsx`,
+`ServiceRegister.jsx`, `SupabaseTest.jsx`, `styles/CarRegister.css`,
+`App.css` (stale copy never imported).
 
 ---
 
@@ -114,7 +112,7 @@ present, FK `services_service_center_id_fkey` exists.
 
 ---
 
-## 5. Migration Inventory (14 files)
+## 5. Migration Inventory (17 files)
 
 | # | File | Status |
 |---|---|---|
@@ -122,6 +120,9 @@ present, FK `services_service_center_id_fkey` exists.
 | 012 | `security_hardening.sql` | ✅ **Applied** (11 policies + `register_vehicle`) |
 | 013 | `service_center_section.sql` | ✅ **Applied 2026-10-19** — 4 `service_centers` policies, center SELECT on `services`, `verify_service`, FK |
 | 014 | `ownership_transfer.sql` | ✅ **Applied 2026-10-19** — `vehicle_transfer_codes`, `create_transfer_code`, `claim_transfer_code` |
+| 015 | `invoice_image.sql` | ✅ **Applied 2026-10-19** — `services.image` + private bucket + `_owns_active_vehicle_folder` + 3 storage policies |
+| 016 | `service_templates_coverage.sql` | ✅ **Applied 2026-10-19** — universal (`brand=''`) rows + model rows for high-volume cars |
+| 017 | `market_service_templates.sql` | ✅ **Applied 2026-10-20** — 3-layer coverage of the whole market (38 brands × 12 services + timing belts) |
 
 `_cleanup_e2e_test_data.sql` — ✅ **Executed 2026-10-19**; post-state verified:
 `vehicles=2, ownerships=2, services=4, profiles=1, users=1, centers=0, codes=0, leftover=0`.
@@ -138,35 +139,77 @@ present, FK `services_service_center_id_fkey` exists.
 - `vehicle_transfer_codes` exists, `relrowsecurity = true`, policies = 1 ✅
 - `authenticated`: `SELECT` grant = 1, `INSERT` grant = 0 ✅
 
+### Actual post-015 verification
+
+- `services.image` column = 1, bucket `invoice-images` exists and is **private**
+- helper `_owns_active_vehicle_folder` = 1, storage policies = 3
+- pre-existing public policies untouched = 17 ✅
+
+### Actual post-016 / post-017 verification
+
+- `service_templates` **48 → 579 rows**
+- universal (`brand=''`) = **12**, brand-level = **456**, model-level = **111**
+- distinct brands = **38**, distinct `(brand, model)` pairs = **103**
+- E2E through the app's own Supabase client + engine:
+  `کیا/سلتوس`, `هاوال/H6`, `بی وای دی/سونگ`, `مرسدس بنز/C200`
+  each resolve to **12 services, 0 duplicates** (previously: 4 universal rows only)
+  — `پژو/206 تیپ 2` → 13 (its dedicated timing-belt row on top of the brand plan)
+  — unknown brand → still falls back to the 12 universal rows
+
 ---
 
 ## 6. Health Engine (`vehicleHealthEngine.js`)
 
-Pure functions, unit-tested (56 tests in `vehicleHealthEngine.test.js`):
+Pure functions, unit-tested (68 tests in `vehicleHealthEngine.test.js`):
 `normalizeServiceTitle`, `serviceTitleMatches`, `getLastServiceForTemplate`,
 `getNextDueMileage`, `getTemplateStatus`, `filterTemplatesForVehicle`,
 `getOverallHealth`, `getUpcomingServices`, `getLatestService`,
 `resolveNextVehicleMileage` (regression-safe — mileage never decreases).
 
+Internal helpers: `normalizeLabel`, `dedupeByServiceName`,
+`mergeUniversalTemplates`, **`dedupePreferExactModel`** (added with 017 —
+when one service exists both as a brand-level row and an exact-model row,
+the exact-model row wins, so it is neither offered twice in the
+"add service" form nor scored twice in health).
+
+### Template matching (3 layers, `service_templates`)
+
+| Layer | `brand` | `model` | Means |
+|---|---|---|---|
+| 1 universal | `''` | `''` | for every vehicle |
+| 2 brand | set | `''` | any model of that brand |
+| 3 model | set | set | only that exact vehicle |
+
+`filterTemplatesForVehicle` falls back from layer 3 → 2 → 1, so **every brand
+listed in the table yields a full 12-service plan even for an unlisted model**.
+
 ### Known limitations
 
 - Time-based health not computed (km only) — service `date` is stored but not scored
-- `service_templates` coverage gaps: brand+model combinations without templates show nothing
+- A brand **not** in the table still resolves only to the 12 universal rows
 - `getOverallHealth` averages templates without importance weighting
+- Timing-belt rows exist only for engines that really have a belt
+  (XU7/TU5/EF7/M13/M15); chain engines are deliberately left without a row
 
 ---
 
 ## 7. Known Issues / Debt
 
-1. **3 zero-byte files** — `Dashboard.jsx`, `ServiceRegister.jsx`, `styles/CarRegister.css` (tracked in git — owner approval needed to delete)
-2. **`SupabaseTest.jsx`** not routed, safe to delete
-3. **No image upload** — PRD invoice image (`services.image`) not implemented (needs Storage bucket + policy)
-4. **No offline support** — PWA manifest added, service worker deliberately skipped (cache/HMR risk in dev)
-5. **Large page components** — `CarProfile` / `AddService` could be split
-6. **Health is km-only** — service `date` is stored but not scored
+1. **No offline support** — PWA manifest added, service worker deliberately skipped (cache/HMR risk in dev)
+2. **Large page components** — `CarProfile` / `AddService` could be split
+3. **Health is km-only** — service `date` is stored but not scored
+4. **`service_templates` policy is `to public`** — anon can read the reference
+   table. Harmless (no private data) but could be tightened to `authenticated`
+5. **Dead tables** — `service_items` / `vehicle_services` are unused leftovers
+   and could be dropped once confirmed to hold no valuable data
 
 **Cleared on 2026-10-19:** all 24 `console.log` debug statements removed;
-test data purged from the live database.
+test data purged from the live database; 5 dead files deleted
+(`Dashboard.jsx`, `ServiceRegister.jsx`, `SupabaseTest.jsx`,
+`styles/CarRegister.css`, `App.css`).
+
+**Cleared on 2026-10-20:** invoice image upload implemented and E2E verified
+(015); `service_templates` coverage gaps closed for the whole market (017).
 
 ---
 
