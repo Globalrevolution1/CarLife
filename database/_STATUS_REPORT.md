@@ -160,7 +160,7 @@ present, FK `services_service_center_id_fkey` exists.
 
 ## 6. Health Engine (`vehicleHealthEngine.js`)
 
-Pure functions, unit-tested (68 tests in `vehicleHealthEngine.test.js`):
+Pure functions, unit-tested (89 tests in `vehicleHealthEngine.test.js`):
 `normalizeServiceTitle`, `serviceTitleMatches`, `getLastServiceForTemplate`,
 `getNextDueMileage`, `getTemplateStatus`, `filterTemplatesForVehicle`,
 `getOverallHealth`, `getUpcomingServices`, `getLatestService`,
@@ -170,7 +170,13 @@ Internal helpers: `normalizeLabel`, `dedupeByServiceName`,
 `mergeUniversalTemplates`, **`dedupePreferExactModel`** (added with 017 —
 when one service exists both as a brand-level row and an exact-model row,
 the exact-model row wins, so it is neither offered twice in the
-"add service" form nor scored twice in health).
+"add service" form nor scored twice in health),
+**`SERVICE_TITLE_ALIASES`** (added 2026-10-21 — folds legacy «تعویض …»
+titles onto the canonical catalog names, e.g. «تعویض روغن گیربکس» ≡
+«روغن گیربکس», «تعویض فیلتر هوا» ≡ «فیلتر هوا»). Without that map any
+vehicle carrying pre-017 history — the Lexus ls460L baseline seeded by
+migration 011 — rendered the same service twice and scored it twice
+(14 rows with 2 duplicates → now 12 rows, 0 duplicates).
 
 ### Template matching (3 layers, `service_templates`)
 
@@ -190,6 +196,11 @@ listed in the table yields a full 12-service plan even for an unlisted model**.
 - `getOverallHealth` averages templates without importance weighting
 - Timing-belt rows exist only for engines that really have a belt
   (XU7/TU5/EF7/M13/M15); chain engines are deliberately left without a row
+- Baseline row `لکسوس / ls460L — تعویض روغن گیربکس = 5,000 km` (seeded by
+  migration 011 from pre-existing hand-entered data) sits far below the
+  real ~60,000 km interval. The owner's own history — gear oil logged at
+  80,000 km and again at 90,000 km — confirms the value is wrong, but it
+  was left untouched pending owner confirmation (see §7, item 5)
 
 ---
 
@@ -202,6 +213,10 @@ listed in the table yields a full 12-service plan even for an unlisted model**.
    table. Harmless (no private data) but could be tightened to `authenticated`
 5. **Dead tables** — `service_items` / `vehicle_services` are unused leftovers
    and could be dropped once confirmed to hold no valuable data
+6. **Lexus baseline interval is wrong** — `لکسوس / ls460L — تعویض روغن
+   گیربکس = 5,000 km` (migration 011) should be ~60,000 km. Not changed
+   unilaterally because it is owner-visible plan data; needs a one-line
+   `update` once the owner confirms
 
 **Cleared on 2026-10-19:** all 24 `console.log` debug statements removed;
 test data purged from the live database; 5 dead files deleted
