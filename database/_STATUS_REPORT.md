@@ -112,7 +112,7 @@ present, FK `services_service_center_id_fkey` exists.
 
 ---
 
-## 5. Migration Inventory (17 files)
+## 5. Migration Inventory (18 files)
 
 | # | File | Status |
 |---|---|---|
@@ -123,6 +123,7 @@ present, FK `services_service_center_id_fkey` exists.
 | 015 | `invoice_image.sql` | ✅ **Applied 2026-10-19** — `services.image` + private bucket + `_owns_active_vehicle_folder` + 3 storage policies |
 | 016 | `service_templates_coverage.sql` | ✅ **Applied 2026-10-19** — universal (`brand=''`) rows + model rows for high-volume cars |
 | 017 | `market_service_templates.sql` | ✅ **Applied 2026-10-20** — 3-layer coverage of the whole market (38 brands × 12 services + timing belts) |
+| 018 | `fix_lexus_gear_oil_interval.sql` | ✅ **Applied 2026-10-21** — `لکسوس/ls460L` gear-oil interval 5,000 → 60,000 km (owner-confirmed; the 5,000 seeded by 011 was a data-entry artefact) |
 
 `_cleanup_e2e_test_data.sql` — ✅ **Executed 2026-10-19**; post-state verified:
 `vehicles=2, ownerships=2, services=4, profiles=1, users=1, centers=0, codes=0, leftover=0`.
@@ -155,6 +156,17 @@ present, FK `services_service_center_id_fkey` exists.
   each resolve to **12 services, 0 duplicates** (previously: 4 universal rows only)
   — `پژو/206 تیپ 2` → 13 (its dedicated timing-belt row on top of the brand plan)
   — unknown brand → still falls back to the 12 universal rows
+
+### Actual post-018 verification (2026-10-21)
+
+- `لکسوس/ls460L` model rows = 3: `تعویض روغن` 10,000 · `تعویض فیلتر هوا`
+  20,000 · `تعویض روغن گیربکس` **60,000**
+- engine output for that vehicle: **12 services, 0 duplicates**
+  (was 14 rows with 2 duplicates before the `SERVICE_TITLE_ALIASES` fix)
+- full live-DB re-check after the fix: `لکسوس/ls460L`, `بنز/E350`,
+  `کیا/سلتوس` and an unknown brand all resolve to **12 services, 0 duplicates**
+- E2E test account created and **fully purged** the same day; live DB back to
+  `users=1, vehicles=2, ownerships=2, services=4, profiles=1, templates=579`
 
 ---
 
@@ -196,11 +208,6 @@ listed in the table yields a full 12-service plan even for an unlisted model**.
 - `getOverallHealth` averages templates without importance weighting
 - Timing-belt rows exist only for engines that really have a belt
   (XU7/TU5/EF7/M13/M15); chain engines are deliberately left without a row
-- Baseline row `لکسوس / ls460L — تعویض روغن گیربکس = 5,000 km` (seeded by
-  migration 011 from pre-existing hand-entered data) sits far below the
-  real ~60,000 km interval. The owner's own history — gear oil logged at
-  80,000 km and again at 90,000 km — confirms the value is wrong, but it
-  was left untouched pending owner confirmation (see §7, item 5)
 
 ---
 
@@ -213,10 +220,6 @@ listed in the table yields a full 12-service plan even for an unlisted model**.
    table. Harmless (no private data) but could be tightened to `authenticated`
 5. **Dead tables** — `service_items` / `vehicle_services` are unused leftovers
    and could be dropped once confirmed to hold no valuable data
-6. **Lexus baseline interval is wrong** — `لکسوس / ls460L — تعویض روغن
-   گیربکس = 5,000 km` (migration 011) should be ~60,000 km. Not changed
-   unilaterally because it is owner-visible plan data; needs a one-line
-   `update` once the owner confirms
 
 **Cleared on 2026-10-19:** all 24 `console.log` debug statements removed;
 test data purged from the live database; 5 dead files deleted
@@ -225,6 +228,11 @@ test data purged from the live database; 5 dead files deleted
 
 **Cleared on 2026-10-20:** invoice image upload implemented and E2E verified
 (015); `service_templates` coverage gaps closed for the whole market (017).
+
+**Cleared on 2026-10-21:** legacy «تعویض …» titles no longer duplicate a
+service — folded onto the canonical catalog names by
+`SERVICE_TITLE_ALIASES` in the health engine; the wrong 5,000 km gear-oil
+interval on `لکسوس/ls460L` corrected to 60,000 km (018).
 
 ---
 
