@@ -451,3 +451,190 @@
   margin:8px 0 0;
 
 }
+
+
+/* =================================
+   MAINTENANCE PLAN + REMINDERS
+   مبناِ زمان (ماه) — migration 019
+   ================================= */
+
+.service-template-card,
+.reminder-card {
+
+  margin-top:25px;
+
+  background:#f6f7fa;
+
+  border-radius:25px;
+
+  padding:20px;
+
+}
+
+
+.reminder-card {
+
+  border:1px solid #f3d9a4;
+
+  background:#fffdf5;
+
+}
+
+
+.service-template-card h3,
+.reminder-card h3 {
+
+  color:#071a33;
+
+  margin-top:0;
+
+}
+
+
+.service-template-card > p,
+.reminder-count {
+
+  color:#6b7280;
+
+  font-size:14px;
+
+  margin:0;
+
+}
+
+
+.template-item {
+
+  display:flex;
+
+  justify-content:space-between;
+
+  align-items:center;
+
+  gap:12px;
+
+  flex-wrap:wrap;
+
+  background:white;
+
+  padding:15px;
+
+  margin-top:12px;
+
+  border-radius:18px;
+
+  border-right:5px solid #c9a227;
+
+  box-shadow:0 5px 15px rgba(0,0,0,.05);
+
+}
+
+
+.template-item > div {
+
+  display:flex;
+
+  flex-direction:column;
+
+  gap:6px;
+
+}
+
+
+.template-item span {
+
+  color:#071a33;
+
+  font-weight:700;
+
+}
+
+
+.template-item strong {
+
+  color:#071a33;
+
+  font-size:15px;
+
+}
+
+
+.template-item small {
+
+  color:#6b7280;
+
+  font-size:12px;
+
+}
+
+
+/* لبهٔ رنگی بر اساس فوریتِ یادآوری */
+
+.template-item.is-overdue {
+
+  border-right-color:#dc2626;
+
+  background:#fff5f5;
+
+}
+
+
+.template-item.is-soon {
+
+  border-right-color:#d97706;
+
+  background:#fffbeb;
+
+}
+
+
+/* =================================
+   PRINT — چاپ/ذخیرهٔ PDF پرونده
+   ================================= */
+
+@media print {
+
+  body * {
+
+    visibility:hidden;
+
+  }
+
+  .profile-page,
+  .profile-page * {
+
+    visibility:visible;
+
+  }
+
+  .profile-page {
+
+    position:absolute;
+
+    inset:0;
+
+    background:white;
+
+    padding:0;
+
+    display:block;
+
+  }
+
+  .profile-card {
+
+    box-shadow:none;
+
+    max-width:none;
+
+    padding:0;
+
+  }
+
+  .print-hide {
+
+    display:none !important;
+
+  }
+
+}

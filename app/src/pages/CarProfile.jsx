@@ -3,12 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { toPersianError } from "../lib/errorMessage";
 import AppHeader from "../components/AppHeader";
+import SmartLabel from "../components/SmartLabel";
 import {
   filterTemplatesForVehicle,
   getLatestService,
   getOverallHealth as engineGetOverallHealth,
   getTemplateStatus as engineGetTemplateStatus,
   getUpcomingServices as engineGetUpcomingServices,
+  getDueServices as engineGetDueServices,
 } from "../utils/vehicleHealthEngine";
 import "./../styles/CarProfile.css";
 
@@ -184,7 +186,8 @@ function CarProfile() {
           brand,
           model,
           service_name,
-          interval_km
+          interval_km,
+          interval_months
         `)
         .order("interval_km", {
           ascending: true,
@@ -225,6 +228,27 @@ function CarProfile() {
     return Number(value).toLocaleString("en-US");
   }
 
+  // «هر ۱۰,۰۰۰ کیلومتر» / «هر ۶ ماه» / هر دو
+  function formatInterval(template) {
+    const parts = [];
+
+    if (Number(template?.interval_km) > 0) {
+      parts.push(
+        `هر ${formatNumber(template.interval_km)} کیلومتر`
+      );
+    }
+
+    if (Number(template?.interval_months) > 0) {
+      parts.push(
+        `هر ${formatNumber(template.interval_months)} ماه`
+      );
+    }
+
+    return parts.length > 0
+      ? parts.join(" یا ")
+      : "فاصلهٔ سرویس مشخص نیست";
+  }
+
   // نام مرکز خدماتِ انجام‌دهندهٔ سرویس
   // (PRD ← تاریخچه خودرو ← مرکز خدمات انجام‌دهنده)
   function getCenterName(centerId) {
@@ -260,7 +284,12 @@ function CarProfile() {
   // (services و car) را به Engine می‌دهند.
   // ==========================================
 
-function getTemplateStatus(
+  // امروز — مبنای سنجش «ماه» در موتور سلامت.
+  // هر بار رندر محاسبه می‌شود تا صفحهٔ بازمانده از دیروز،
+  // انتظارِ اشتباه نشان ندهد.
+  const TODAY = new Date();
+
+  function getTemplateStatus(
     template,
   ) {
     return engineGetTemplateStatus({
@@ -268,6 +297,7 @@ function getTemplateStatus(
       services,
       currentMileage:
         car?.current_mileage || 0,
+      currentDate: TODAY,
       formatNumber,
     });
   }
@@ -282,6 +312,7 @@ function getTemplateStatus(
       currentMileage:
         car?.current_mileage || 0,
       vehicle: car,
+      currentDate: TODAY,
       formatNumber,
     });
   }
@@ -349,6 +380,18 @@ function getTemplateStatus(
       services,
       currentMileage:
         car?.current_mileage || 0,
+      currentDate: TODAY,
+      formatNumber,
+    });
+
+  // سرویس‌های عقب‌افتاده / نزدیک‌موعد — بخش «یادآوری‌ها»
+  const dueServices =
+    engineGetDueServices({
+      templates: scopedTemplates,
+      services,
+      currentMileage:
+        car?.current_mileage || 0,
+      currentDate: TODAY,
       formatNumber,
     });
 
@@ -486,12 +529,11 @@ function getTemplateStatus(
             </span>
 
             <strong>
-
-              {health.score !==
-              null
-                ? `${health.score}%`
-                : "—"}
-
+              {health.score !== null ? (
+                <bdi>{health.score}%</bdi>
+              ) : (
+                "—"
+              )}
             </strong>
 
           </div>
@@ -586,11 +628,9 @@ function getTemplateStatus(
                       </span>
 
                       <strong>
-                        هر{" "}
-                        {formatNumber(
-                          template.interval_km
-                        )}{" "}
-                        کیلومتر
+                        {formatInterval(
+                          template
+                        )}
                       </strong>
 
                     </div>
@@ -617,7 +657,9 @@ function getTemplateStatus(
 
                         {" "}
 
-                        {status.label}
+                        <SmartLabel>
+                          {status.label}
+                        </SmartLabel>
 
                       </span>
 
@@ -625,21 +667,36 @@ function getTemplateStatus(
                         null && (
                         <small>
                           سرویس بعدی:{" "}
-                          {formatNumber(
-                            status.nextMileage
-                          )}{" "}
-                          km
+                          <bdi>
+                            {formatNumber(
+                              status.nextMileage
+                            )}{" "}
+                            km
+                          </bdi>
+                        </small>
+                      )}
+
+                      {status.nextDate && (
+                        <small>
+                          از نظر زمانی:{" "}
+                          <bdi>
+                            {formatDate(
+                              status.nextDate
+                            )}
+                          </bdi>
                         </small>
                       )}
 
                       {status.lastService && (
                         <small>
                           آخرین سرویس:{" "}
-                          {formatNumber(
-                            status.lastService
-                              .mileage
-                          )}{" "}
-                          km
+                          <bdi>
+                            {formatNumber(
+                              status.lastService
+                                .mileage
+                            )}{" "}
+                            km
+                          </bdi>
                         </small>
                       )}
 
@@ -653,6 +710,82 @@ function getTemplateStatus(
           )}
 
         </div>
+
+        {/* ================================= */}
+        {/* REMINDERS — PRD Phase 5           */}
+        {/* عقب‌افتاده‌ها و نزدیک‌موعدها       */}
+        {/* ================================= */}
+
+        {dueServices.length > 0 && (
+          <div className="reminder-card">
+
+            <h3>
+              ⏰ یادآوری‌ها
+            </h3>
+
+            <p className="reminder-count">
+              {formatNumber(dueServices.length)} مورد نیاز به توجه
+            </p>
+
+            {dueServices.map((item) => (
+              <div
+                key={item.template.id}
+                className={`template-item ${
+                  item.status.status === "danger"
+                    ? "is-overdue"
+                    : "is-soon"
+                }`}
+              >
+
+                <div>
+
+                  <span>
+                    {item.template.service_name}
+                  </span>
+
+                  <strong>
+                    <SmartLabel>
+                      {item.status.label}
+                    </SmartLabel>
+                  </strong>
+
+                </div>
+
+                <div>
+
+                  <span>
+                    {item.status.status === "danger"
+                      ? "🔴 عقب‌افتاده"
+                      : "🟡 نزدیک موعد"}
+                  </span>
+
+                  {item.status.nextDate && (
+                    <small>
+                      موعد زمانی:{" "}
+                      {formatDate(item.status.nextDate)}
+                    </small>
+                  )}
+
+                  {item.status.nextMileage !==
+                    null && (
+                    <small>
+                      موعد کیلومتری:{" "}
+                      <bdi>
+                        {formatNumber(
+                          item.status.nextMileage
+                        )}{" "}
+                        km
+                      </bdi>
+                    </small>
+                  )}
+
+                </div>
+
+              </div>
+            ))}
+
+          </div>
+        )}
 
         {/* ================================= */}
         {/* CAR INFORMATION */}
@@ -701,10 +834,12 @@ function getTemplateStatus(
               کیلومتر فعلی:
             </span>
 
-            {formatNumber(
-              car.current_mileage
-            )}{" "}
-            km
+            <bdi>
+              {formatNumber(
+                car.current_mileage
+              )}{" "}
+              km
+            </bdi>
           </div>
 
           <div>
@@ -725,6 +860,17 @@ function getTemplateStatus(
           type="button"
         >
           ✏️ ویرایش اطلاعات خودرو
+        </button>
+
+        <button
+          className="continue-btn"
+          onClick={() =>
+            navigate(`/report/${car.id}`)
+          }
+          type="button"
+          style={{ marginTop: "10px", background: "#071a33" }}
+        >
+          📄 خروجی گزارش خودرو (چاپ / PDF)
         </button>
 
         {/* ================================= */}
@@ -878,11 +1024,13 @@ function getTemplateStatus(
                     </p>
                   )}
 
-                  {service.description && (
+                  {/* اگر شرح عیناً عنوان باشد (دادهٔ پایهٔ 011)
+                      نمایشش فقط ظاهر را خراب می‌کند */}
+                  {service.description &&
+                    service.description.trim() !==
+                      service.title.trim() && (
                     <p>
-                      {
-                        service.description
-                      }
+                      {service.description}
                     </p>
                   )}
 

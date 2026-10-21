@@ -1,0 +1,374 @@
+/* =============================================================
+   گزارش پروندهٔ دیجیتال خودرو — PRD Phase 7
+   خروجی چاپی / PDF با window.print()
+   ============================================================= */
+
+.report-page {
+
+  min-height: 100vh;
+  direction: rtl;
+  background: linear-gradient(180deg, #071a33, #0e2b50);
+  padding: 28px 16px 60px;
+  font-family: "Vazirmatn", sans-serif;
+
+}
+
+
+/* ---------- TOOLBAR ---------- */
+
+.report-toolbar {
+
+  max-width: 820px;
+  margin: 0 auto 18px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+
+}
+
+
+.report-btn {
+
+  border: none;
+  border-radius: 14px;
+  padding: 13px 20px;
+  background: linear-gradient(135deg, #d4af37, #f5d97b);
+  color: #071a33;
+  font-family: "Vazirmatn", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+
+}
+
+
+.report-btn.ghost {
+
+  background: rgba(255, 255, 255, .12);
+  color: #d8dee8;
+
+}
+
+
+/* ---------- SHEET ---------- */
+
+.report-sheet {
+
+  max-width: 820px;
+  margin: auto;
+  background: #fff;
+  color: #1f2937;
+  border-radius: 18px;
+  padding: 34px 30px;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, .35);
+
+}
+
+
+.report-head {
+
+  text-align: center;
+  border-bottom: 3px solid #d4af37;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+
+}
+
+
+.report-logo {
+
+  color: #c9a227;
+  font-size: 26px;
+  font-weight: 900;
+
+}
+
+
+.report-head h1 {
+
+  margin: 8px 0 4px;
+  color: #071a33;
+  font-size: 24px;
+
+}
+
+
+.report-meta {
+
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+
+}
+
+
+/* ---------- SECTIONS ---------- */
+
+.report-section {
+
+  margin-top: 26px;
+  break-inside: avoid;
+
+}
+
+
+.report-section h2 {
+
+  color: #071a33;
+  font-size: 17px;
+  margin: 0 0 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #e5e7eb;
+
+}
+
+
+.report-grid {
+
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin: 0;
+
+}
+
+
+.report-grid > div {
+
+  background: #f8f9fc;
+  border-radius: 12px;
+  padding: 13px 15px;
+
+}
+
+
+.report-grid dt {
+
+  color: #6b7280;
+  font-size: 12px;
+  margin-bottom: 5px;
+
+}
+
+
+.report-grid dd {
+
+  margin: 0;
+  color: #071a33;
+  font-size: 15px;
+  font-weight: 700;
+
+}
+
+
+.ltr {
+
+  direction: ltr;
+  text-align: right;
+
+}
+
+
+/* ---------- HEALTH ---------- */
+
+.report-health {
+
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 14px;
+  padding: 16px 18px;
+
+}
+
+
+.report-health strong {
+
+  font-size: 26px;
+  color: #071a33;
+
+}
+
+
+.report-health span {
+
+  font-weight: 700;
+  color: #071a33;
+
+}
+
+
+.report-health.good {
+  background: #ecfdf5;
+  border-right: 5px solid #16a34a;
+}
+
+
+.report-health.warning {
+  background: #fffbeb;
+  border-right: 5px solid #d97706;
+}
+
+
+.report-health.danger {
+  background: #fff5f5;
+  border-right: 5px solid #dc2626;
+}
+
+
+.report-health.unknown {
+  background: #f3f4f6;
+  border-right: 5px solid #9ca3af;
+}
+
+
+.report-note {
+
+  color: #6b7280;
+  font-size: 12px;
+  margin: 10px 0 0;
+  line-height: 1.9;
+
+}
+
+
+/* ---------- TABLES ---------- */
+
+.report-table {
+
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+}
+
+
+.report-table th {
+
+  background: #071a33;
+  color: #fff;
+  padding: 10px 9px;
+  text-align: right;
+  font-weight: 700;
+
+}
+
+
+.report-table td {
+
+  padding: 10px 9px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #1f2937;
+  vertical-align: top;
+
+}
+
+
+.report-table tbody tr:nth-child(even) {
+
+  background: #fafafa;
+
+}
+
+
+.report-desc {
+
+  display: block;
+  color: #6b7280;
+  font-size: 11px;
+  margin-top: 5px;
+  line-height: 1.8;
+
+}
+
+
+.report-msg {
+
+  color: #6b7280;
+  text-align: center;
+  padding: 22px 0;
+
+}
+
+
+/* ---------- FOOTER ---------- */
+
+.report-foot {
+
+  margin-top: 30px;
+  padding-top: 14px;
+  border-top: 1px dashed #d1d5db;
+  color: #9ca3af;
+  font-size: 11px;
+  text-align: center;
+  line-height: 2;
+
+}
+
+
+.report-foot p {
+
+  margin: 4px 0;
+
+}
+
+
+/* =============================================================
+   PRINT — چاپ / ذخیره به PDF
+   ============================================================= */
+
+@media print {
+
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .report-page,
+  .report-page * {
+    visibility: visible;
+  }
+
+  .report-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    min-height: auto;
+    background: #fff;
+    padding: 0;
+  }
+
+  .report-sheet {
+    max-width: none;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .report-section {
+    break-inside: avoid;
+  }
+
+  .report-table thead {
+    display: table-header-group;
+  }
+
+  .report-table tr {
+    break-inside: avoid;
+  }
+
+}

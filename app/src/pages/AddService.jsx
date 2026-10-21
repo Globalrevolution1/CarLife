@@ -248,7 +248,8 @@ function AddService() {
           brand,
           model,
           service_name,
-          interval_km
+          interval_km,
+          interval_months
         `)
         .order("service_name", {
           ascending: true,
@@ -400,6 +401,27 @@ function getLastService(template) {
     return Number(value).toLocaleString(
       "en-US"
     );
+  }
+
+  // «هر ۱۰,۰۰۰ کیلومتر» / «هر ۶ ماه» / هر دو
+  function formatInterval(template) {
+    const parts = [];
+
+    if (Number(template?.interval_km) > 0) {
+      parts.push(
+        `هر ${formatNumber(template.interval_km)} کیلومتر`
+      );
+    }
+
+    if (Number(template?.interval_months) > 0) {
+      parts.push(
+        `هر ${formatNumber(template.interval_months)} ماه`
+      );
+    }
+
+    return parts.length > 0
+      ? parts.join(" یا ")
+      : "مشخص نیست";
   }
 
   // =========================================================
@@ -912,22 +934,23 @@ function getLastService(template) {
               <div>
                 فاصله سرویس:{" "}
                 <strong>
-                  هر{" "}
-                  {formatNumber(
-                    selectedTemplate.interval_km
-                  )}{" "}
-                  کیلومتر
+                  {formatInterval(selectedTemplate)}
                 </strong>
               </div>
 
               <div>
                 آخرین سرویس:{" "}
                 <strong>
-                  {lastService
-                    ? `${formatNumber(
+                  {lastService ? (
+                    <bdi>
+                      {formatNumber(
                         lastService.mileage
-                      )} km`
-                    : "هنوز ثبت نشده"}
+                      )}{" "}
+                      km
+                    </bdi>
+                  ) : (
+                    "هنوز ثبت نشده"
+                  )}
                 </strong>
               </div>
 
@@ -936,10 +959,12 @@ function getLastService(template) {
                 <div>
                   موعد بعدی:{" "}
                   <strong>
-                    {formatNumber(
-                      nextMileage
-                    )}{" "}
-                    km
+                    <bdi>
+                      {formatNumber(
+                        nextMileage
+                      )}{" "}
+                      km
+                    </bdi>
                   </strong>
                 </div>
               )}
@@ -1000,10 +1025,12 @@ function getLastService(template) {
                 }}
               >
                 کیلومتر فعلی ثبت‌شده:{" "}
-                {formatNumber(
-                  vehicle.current_mileage
-                )}{" "}
-                km
+                <bdi>
+                  {formatNumber(
+                    vehicle.current_mileage
+                  )}{" "}
+                  km
+                </bdi>
               </div>
             )}
 

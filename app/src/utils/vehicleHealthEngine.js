@@ -222,7 +222,269 @@ export function getNextDueMileage(lastService, intervalKm) {
 export const NEAR_DUE_THRESHOLD_KM = 1000;
 
 /**
- * وضعیت یک template در برابر کیلومتر فعلی خودرو.
+ * آستانهٔ «نزدیک موعد» بر حسب روز.
+ * زیر این مقدار وضعیت warning می‌گیرد.
+ */
+export const NEAR_DUE_THRESHOLD_DAYS = 30;
+
+/**
+ * میانگین مسیر روزانهٔ یک خودروی شخصی (کیلومتر در روز).
+ *
+ * فقط برای «مقایسهٔ اولویت» بین دو مبنا (کیلومتر و روز) به کار
+ * می‌رود تا فهرست «سرویس بعدی» مرتب بماند. در تعیینِ وضعیت
+ * هیچ استفاده‌ای از این عدد نمی‌شود؛ هر مبنا جداگانه سنجیده می‌شود.
+ */
+const KM_PER_DAY_ASSUMED = 20;
+
+const MS_PER_DAY = 86400000;
+
+/**
+ * شدت وضعیت، برای انتخاب بدترین مبنا.
+ */
+const SEVERITY = {
+  good: 1,
+  warning: 2,
+  danger: 3,
+};
+
+/**
+ * افزودن ماه به یک تاریخ، بدون لغزش روز.
+ *
+ * ۳۱ مارس + ۱ ماه → ۳۰ آوریل (آوریل ۳۰ روزه)
+ * ۳۱ مارس + ۲ ماه → ۳۱ مه     (مه ۳۱ روزه، روز حفظ می‌شود)
+ * ۲۹ فوریهٔ کبیسه + ۱۲ ماه → ۲۸ فوریه
+ *
+ * عمداً با متد‌های UTC کار می‌کند: service_date از دیتابیس به
+ * صورت رشتهٔ ISO می‌آید و با parse شدن UTC می‌شود. اگر اینجا از
+ * متد محلی استفاده می‌شد، در منطقهٔ ساعتی مختلف (مثل ایران
+ * UTC+3:30) شمارش روز یکی دو روز جابه‌جا می‌شد.
+ *
+ * @param {Date} date
+ * @param {number} months
+ * @returns {Date}
+ */
+export function addMonths(date, months) {
+  const result = new Date(date.getTime());
+  const day = result.getUTCDate();
+
+  result.setUTCDate(1);
+  result.setUTCMonth(result.getUTCMonth() + months);
+
+  const lastDayOfMonth = new Date(
+    Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+
+  result.setUTCDate(Math.min(day, lastDayOfMonth));
+
+  return result;
+}
+
+/**
+ * سنجش صِرفاً بر مبنای کیلومتر.
+ *
+ * @returns {object | null} null یعنی این مبنا برای این template تعریف نشده
+ */
+function evaluateByKm(odometer, lastService, intervalKm, formatNumber) {
+  if (intervalKm <= 0) {
+    return null;
+  }
+
+  const lastMileage = toNumber(lastService?.mileage);
+  const nextMileage = lastMileage + intervalKm;
+  const remaining = nextMileage - odometer;
+
+  if (remaining < 0) {
+    const overdueBy = Math.abs(remaining);
+
+    return {
+      status: "danger",
+      label: `${formatNumber(overdueBy)} km عقب‌افتاده`,
+      nextMileage,
+      remaining,
+      overdueBy,
+      score: 50,
+    };
+  }
+
+  if (remaining === 0) {
+    return {
+      status: "danger",
+      label: "موعد سرویس رسیده",
+      nextMileage,
+      remaining,
+      overdueBy: 0,
+      score: 50,
+    };
+  }
+
+  if (remaining <= NEAR_DUE_THRESHOLD_KM) {
+    return {
+      status: "warning",
+      label: `${formatNumber(remaining)} km دیگر`,
+      nextMileage,
+      remaining,
+      overdueBy: 0,
+      score: 80,
+    };
+  }
+
+  return {
+    status: "good",
+    label: `${formatNumber(remaining)} km دیگر`,
+    nextMileage,
+    remaining,
+    overdueBy: 0,
+    score: 100,
+  };
+}
+
+/**
+ * سنجش صرفاً بر مبنای زمان (ماه).
+ *
+ * مرجعِ «آخرین سرویس» همان تاریخی است که برای همان سرویس ثبت
+ * شده (service_date و در نبودش created_at)؛ نه تاریخِ ثبتِ خودرو.
+ *
+ * @returns {object | null} null یعنی ماه تعریف نشده، تاریخ معتبر
+ *                          نیست، یا currentDate پاس نشده
+ */
+function evaluateByTime(currentDate, lastService, intervalMonths, formatNumber) {
+  if (intervalMonths <= 0 || !currentDate) {
+    return null;
+  }
+
+  const lastMs = serviceTimestamp(lastService);
+
+  if (!lastMs) {
+    return null;
+  }
+
+  const nowMs = new Date(currentDate).getTime();
+
+  if (Number.isNaN(nowMs)) {
+    return null;
+  }
+
+  const nextDate = addMonths(new Date(lastMs), intervalMonths);
+  const daysLeft = Math.ceil((nextDate.getTime() - nowMs) / MS_PER_DAY);
+
+  if (daysLeft < 0) {
+    const overdueByDays = Math.abs(daysLeft);
+
+    return {
+      status: "danger",
+      label: `${formatNumber(overdueByDays)} روز عقب‌افتاده`,
+      nextDate,
+      daysLeft,
+      overdueByDays,
+      score: 50,
+    };
+  }
+
+  if (daysLeft === 0) {
+    return {
+      status: "danger",
+      label: "موعد سرویس رسیده",
+      nextDate,
+      daysLeft,
+      overdueByDays: 0,
+      score: 50,
+    };
+  }
+
+  if (daysLeft <= NEAR_DUE_THRESHOLD_DAYS) {
+    return {
+      status: "warning",
+      label: `${formatNumber(daysLeft)} روز دیگر`,
+      nextDate,
+      daysLeft,
+      overdueByDays: 0,
+      score: 80,
+    };
+  }
+
+  return {
+    status: "good",
+    label: `${formatNumber(daysLeft)} روز دیگر`,
+    nextDate,
+    daysLeft,
+    overdueByDays: 0,
+    score: 100,
+  };
+}
+
+/**
+ * ادغام نتیجهٔ دو مبنا: هر کدام زودتر برسد، تعیین‌کننده است.
+ *
+ * اگر فقط یک مبنا تعریف شده باشد، همان حاکم است و خروجی دقیقاً
+ * همان شکل قدیمی (کیلومتر-محور) را دارد.
+ */
+function mergeEvaluations(km, time, lastService) {
+  const available = [km, time].filter(Boolean);
+
+  if (available.length === 0) {
+    return {
+      status: "unknown",
+      label: "فاصله سرویس مشخص نیست",
+      nextMileage: null,
+      remaining: null,
+      overdueBy: null,
+      nextDate: null,
+      daysLeft: null,
+      overdueByDays: null,
+      lastService,
+      score: null,
+    };
+  }
+
+  const worst = available.reduce((a, b) =>
+    SEVERITY[b.status] > SEVERITY[a.status] ? b : a,
+  );
+
+  return {
+    status: worst.status,
+    label: worst.label,
+    nextMileage: km?.nextMileage ?? null,
+    remaining: km?.remaining ?? null,
+    overdueBy: km?.overdueBy ?? null,
+    nextDate: time?.nextDate ?? null,
+    daysLeft: time?.daysLeft ?? null,
+    overdueByDays: time?.overdueByDays ?? null,
+    lastService,
+    score: worst.score,
+  };
+}
+
+/**
+ * «سرویس بعدی» چقدر نزدیک است، در مقیاس کیلومتر.
+ *
+ * فقط برای مرتب‌سازی فهرست‌هاست؛ عددِ مخلوطِ واحد است ولی چون
+ * هر دو «چقدر مانده» را می‌سنجند، کوچک‌تر = فوری‌تر.
+ */
+function urgencyOf(item) {
+  const remaining = item?.status?.remaining;
+  const daysLeft = item?.status?.daysLeft;
+
+  const byKm = remaining === null || remaining === undefined
+    ? Infinity
+    : remaining;
+
+  const byDays =
+    daysLeft === null || daysLeft === undefined
+      ? Infinity
+      : daysLeft * KM_PER_DAY_ASSUMED;
+
+  return Math.min(byKm, byDays);
+}
+
+/**
+ * وضعیت یک template در برابر کیلومتر فعلی و تاریخ امروز.
+ *
+ * هر template می‌تواند یک یا هر دو مبنا را داشته باشد:
+ *   interval_km     ← «هر ۱۰,۰۰۰ کیلومتر»
+ *   interval_months ← «هر ۶ ماه»
+ *
+ * وضعیتِ نهایی، بدترینِ دو مبناست. اگر فقط یکی تعریف شده باشد،
+ * رفتار دقیقاً همان گذشته است (کیلومتر-محور).
  *
  * خروجی:
  *   status: 'unknown' | 'danger' | 'warning' | 'good'
@@ -235,6 +497,7 @@ export const NEAR_DUE_THRESHOLD_KM = 1000;
  * @param {object}   params.template
  * @param {Array}    params.services
  * @param {number}   params.currentMileage
+ * @param {Date | string | number} [params.currentDate] اگر پاس نشود، مبناِ زمان سنجیده نمی‌شود
  * @param {Function} [params.formatNumber]
  * @returns {{
  *   status: string,
@@ -242,6 +505,9 @@ export const NEAR_DUE_THRESHOLD_KM = 1000;
  *   nextMileage: number | null,
  *   remaining: number | null,
  *   overdueBy: number | null,
+ *   nextDate: Date | null,
+ *   daysLeft: number | null,
+ *   overdueByDays: number | null,
  *   lastService: object | null,
  *   score: number | null,
  * }}
@@ -250,10 +516,12 @@ export function getTemplateStatus({
   template,
   services = [],
   currentMileage = 0,
+  currentDate = null,
   formatNumber = defaultFormatNumber,
 }) {
   const odometer = toNumber(currentMileage);
-  const interval = toNumber(template?.interval_km);
+  const intervalKm = toNumber(template?.interval_km);
+  const intervalMonths = toNumber(template?.interval_months);
 
   const lastService = getLastServiceForTemplate(template, services);
 
@@ -266,84 +534,36 @@ export function getTemplateStatus({
       nextMileage: null,
       remaining: null,
       overdueBy: null,
+      nextDate: null,
+      daysLeft: null,
+      overdueByDays: null,
       lastService: null,
       score: null,
     };
   }
 
-  // ---- INVALID INTERVAL ----
+  // ---- هیچ مبنایی تعریف نشده ----
 
-  if (interval <= 0) {
+  if (intervalKm <= 0 && intervalMonths <= 0) {
     return {
       status: "unknown",
       label: "فاصله سرویس مشخص نیست",
       nextMileage: null,
       remaining: null,
       overdueBy: null,
+      nextDate: null,
+      daysLeft: null,
+      overdueByDays: null,
       lastService,
       score: null,
     };
   }
 
-  const lastMileage = toNumber(lastService?.mileage);
-  const nextMileage = lastMileage + interval;
-  const remaining = nextMileage - odometer;
-
-  // ---- OVERDUE ----
-
-  if (remaining < 0) {
-    const overdueBy = Math.abs(remaining);
-
-    return {
-      status: "danger",
-      label: `${formatNumber(overdueBy)} km عقب‌افتاده`,
-      nextMileage,
-      remaining,
-      overdueBy,
-      lastService,
-      score: 50,
-    };
-  }
-
-  // ---- EXACT DUE ----
-
-  if (remaining === 0) {
-    return {
-      status: "danger",
-      label: "موعد سرویس رسیده",
-      nextMileage,
-      remaining,
-      overdueBy: 0,
-      lastService,
-      score: 50,
-    };
-  }
-
-  // ---- NEAR DUE ----
-
-  if (remaining <= NEAR_DUE_THRESHOLD_KM) {
-    return {
-      status: "warning",
-      label: `${formatNumber(remaining)} km دیگر`,
-      nextMileage,
-      remaining,
-      overdueBy: 0,
-      lastService,
-      score: 80,
-    };
-  }
-
-  // ---- GOOD ----
-
-  return {
-    status: "good",
-    label: `${formatNumber(remaining)} km دیگر`,
-    nextMileage,
-    remaining,
-    overdueBy: 0,
+  return mergeEvaluations(
+    evaluateByKm(odometer, lastService, intervalKm, formatNumber),
+    evaluateByTime(currentDate, lastService, intervalMonths, formatNumber),
     lastService,
-    score: 100,
-  };
+  );
 }
 
 /**
@@ -563,6 +783,7 @@ export function filterTemplatesForVehicle(templates, vehicle) {
  * @param {Array}    params.services
  * @param {number}   params.currentMileage
  * @param {object}  [params.vehicle]      خودرو؛ برای فیلتر مدل‌محور
+ * @param {Date | string | number} [params.currentDate] فعال‌کردن مبناِ زمان
  * @param {Function} [params.formatNumber]
  * @returns {{ label: string, score: number | null, className: string }}
  */
@@ -571,6 +792,7 @@ export function getOverallHealth({
   services = [],
   currentMileage = 0,
   vehicle = null,
+  currentDate = null,
   formatNumber = defaultFormatNumber,
 }) {
   const scoped = filterTemplatesForVehicle(templates, vehicle);
@@ -584,6 +806,7 @@ export function getOverallHealth({
       template,
       services,
       currentMileage,
+      currentDate,
       formatNumber,
     }),
   );
@@ -624,13 +847,15 @@ export function getOverallHealth({
 /**
  * سرویس‌های پیش‌رو، نزدیک‌ترین اول.
  *
- * فقط وضعیت‌هایی که remaining دارند و منفی نیستند.
+ * سرویسی «پیش‌رو» است که هنوز عقب نیفتاده باشد و لااقل یک مبنا
+ * (کیلومتر یا روز) برایش ماندهٔ مثبت داشته باشد.
  *
  * @param {object} params
  * @param {Array} params.templates
  * @param {Array} params.services
  * @param {number} params.currentMileage
  * @param {object} [params.vehicle]   خودرو؛ برای فیلتر مدل‌محور
+ * @param {Date | string | number} [params.currentDate]
  * @param {Function} [params.formatNumber]
  * @returns {Array<{ template: object, status: object }>}
  */
@@ -639,6 +864,7 @@ export function getUpcomingServices({
   services = [],
   currentMileage = 0,
   vehicle = null,
+  currentDate = null,
   formatNumber = defaultFormatNumber,
 }) {
   return filterTemplatesForVehicle(templates, vehicle)
@@ -648,14 +874,76 @@ export function getUpcomingServices({
         template,
         services,
         currentMileage,
+        currentDate,
+        formatNumber,
+      }),
+    }))
+    .filter((item) => isStillDue(item.status))
+    .sort((a, b) => urgencyOf(a) - urgencyOf(b));
+}
+
+/**
+ * سرویس‌های عقب‌افتاده یا نزدیک‌به‌موعد — مبنای بخش «یادآوری‌ها».
+ *
+ * فوری‌ترین اول مرتب می‌شود: اول danger، بعد warning.
+ *
+ * @param {object} params
+ * @param {Array} params.templates
+ * @param {Array} params.services
+ * @param {number} params.currentMileage
+ * @param {object} [params.vehicle]
+ * @param {Date | string | number} [params.currentDate]
+ * @param {Function} [params.formatNumber]
+ * @returns {Array<{ template: object, status: object }>}
+ */
+export function getDueServices({
+  templates = [],
+  services = [],
+  currentMileage = 0,
+  vehicle = null,
+  currentDate = null,
+  formatNumber = defaultFormatNumber,
+}) {
+  return filterTemplatesForVehicle(templates, vehicle)
+    .map((template) => ({
+      template,
+      status: getTemplateStatus({
+        template,
+        services,
+        currentMileage,
+        currentDate,
         formatNumber,
       }),
     }))
     .filter(
       (item) =>
-        item.status.remaining !== null && item.status.remaining >= 0,
+        item.status.status === "danger" || item.status.status === "warning",
     )
-    .sort((a, b) => a.status.remaining - b.status.remaining);
+    .sort(
+      (a, b) =>
+        SEVERITY[b.status.status] - SEVERITY[a.status.status] ||
+        urgencyOf(a) - urgencyOf(b),
+    );
+}
+
+/**
+ * آیا هنوز برای این سرویس مانده‌ای باقی مانده؟
+ *
+ * @param {object} status
+ * @returns {boolean}
+ */
+function isStillDue(status) {
+  // عقب‌افتاده، پیش‌رو نیست — حتی اگر مبنای دیگر هنوز مهلت داشته باشد.
+  if (status.status === "danger") {
+    return false;
+  }
+
+  const byKm =
+    typeof status.remaining === "number" && status.remaining >= 0;
+  const byDays =
+    typeof status.daysLeft === "number" && status.daysLeft >= 0;
+
+  return byKm || byDays;
 }
 
 /**

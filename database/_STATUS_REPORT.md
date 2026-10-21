@@ -1,19 +1,19 @@
-# Karnegar — Status Report (2026-10-20)
+# Karnegar — Status Report (2026-10-21)
 
 ## 1. Executive Summary
 
 | Metric | Value |
 |---|---|
 | Project | Karnegar (formerly CarLife) |
-| MVP (PRD sections 2 + 5 + 6 + 9) | Frontend 100% written — **DB migrations 013/014/015/016/017 applied & E2E verified** |
-| Overall Progress | ~90% of PRD scope |
+| MVP (PRD sections 2 + 5 + 6 + 9) | Frontend 100% written — **DB migrations 013–019 applied & E2E verified** |
+| Overall Progress | ~95% of PRD scope |
 | Database | Supabase (PostgreSQL) — live, RLS verified by E2E probe |
 | Auth | Supabase Auth (email/password) |
 | Frontend | React 19 + Vite 8 + React Router 7 |
 | CSS | Plain CSS per-page files |
-| Quality gates | `npm run verify` → lint 0 errors, **68 tests pass**, production build OK (88 modules) |
+| Quality gates | `npm run verify` → lint 0 errors, **108 tests pass**, production build OK (90 modules) |
 
-**No blocker.** Migrations `013`–`017` were executed on the live database and
+**No blocker.** Migrations `013`–`019` were executed on the live database and
 verified by query. The live database is back to its clean baseline (no test data
 left — only the real client account).
 
@@ -33,6 +33,7 @@ left — only the real client account).
 | `CenterRegister.jsx` | `/center-register` | ✅ Protected — register / already-registered state |
 | `CenterPanel.jsx` | `/center-panel` | ✅ Protected — list + `verify_service` RPC |
 | `TransferClaim.jsx` | `/transfer` | ✅ Protected — **E2E verified (claim + one-time code + old owner locked out)** |
+| `VehicleReport.jsx` | `/report/:id` | ✅ Protected — printable report (vehicle, health, plan, reminders, history) |
 
 Shared: `components/AppHeader.jsx` (logout on every protected page),
 `components/ProtectedRoute.jsx` (unauthenticated → `/`),
@@ -112,7 +113,7 @@ present, FK `services_service_center_id_fkey` exists.
 
 ---
 
-## 5. Migration Inventory (18 files)
+## 5. Migration Inventory (19 files)
 
 | # | File | Status |
 |---|---|---|
@@ -124,6 +125,7 @@ present, FK `services_service_center_id_fkey` exists.
 | 016 | `service_templates_coverage.sql` | ✅ **Applied 2026-10-19** — universal (`brand=''`) rows + model rows for high-volume cars |
 | 017 | `market_service_templates.sql` | ✅ **Applied 2026-10-20** — 3-layer coverage of the whole market (38 brands × 12 services + timing belts) |
 | 018 | `fix_lexus_gear_oil_interval.sql` | ✅ **Applied 2026-10-21** — `لکسوس/ls460L` gear-oil interval 5,000 → 60,000 km (owner-confirmed; the 5,000 seeded by 011 was a data-entry artefact) |
+| 019 | `interval_months.sql` | ✅ **Applied 2026-10-21** — `service_templates.interval_months` (time-based health); 6–60 months per service, 579/579 rows populated |
 
 `_cleanup_e2e_test_data.sql` — ✅ **Executed 2026-10-19**; post-state verified:
 `vehicles=2, ownerships=2, services=4, profiles=1, users=1, centers=0, codes=0, leftover=0`.
@@ -170,12 +172,25 @@ present, FK `services_service_center_id_fkey` exists.
 
 ---
 
+### Actual post-019 verification (2026-10-21)
+
+- `service_templates.interval_months` exists; **579/579 rows populated, 0 null**
+- per-service months: روغن موتور/فیلتر روغن **6** · فیلتر هوا/کابین **12** ·
+  روغن گیربکس، روغن ترمز، ضد یخ، فیلتر بنزین، لنت‌ها **24** · شمع **30** ·
+  باتری **36** · تسمه تایم، تعویض لاستیک **60**
+- legacy names from 011 (`تعویض روغن`, `تعویض روغن گیربکس`, `تعویض فیلتر هوا`)
+  mapped too, so dedicated Lexus rows get a time basis as well
+- constraint `service_templates_interval_months_positive` (NULL or > 0)
+
+---
+
 ## 6. Health Engine (`vehicleHealthEngine.js`)
 
-Pure functions, unit-tested (89 tests in `vehicleHealthEngine.test.js`):
+Pure functions, unit-tested (108 tests in `vehicleHealthEngine.test.js`):
 `normalizeServiceTitle`, `serviceTitleMatches`, `getLastServiceForTemplate`,
 `getNextDueMileage`, `getTemplateStatus`, `filterTemplatesForVehicle`,
-`getOverallHealth`, `getUpcomingServices`, `getLatestService`,
+`getOverallHealth`, `getUpcomingServices`, **`getDueServices`**,
+`addMonths`, `getLatestService`,
 `resolveNextVehicleMileage` (regression-safe — mileage never decreases).
 
 Internal helpers: `normalizeLabel`, `dedupeByServiceName`,
@@ -190,6 +205,24 @@ vehicle carrying pre-017 history — the Lexus ls460L baseline seeded by
 migration 011 — rendered the same service twice and scored it twice
 (14 rows with 2 duplicates → now 12 rows, 0 duplicates).
 
+### Two bases: km **and** months (added 2026-10-21, migration 019)
+
+Every template may carry one or both of `interval_km` / `interval_months`;
+**whichever comes first decides the status.**
+
+- `evaluateByKm` — unchanged legacy rule: last service mileage + `interval_km` vs odometer
+- `evaluateByTime` — last service **date** (`service_date`, falling back to
+  `created_at`) + `interval_months` vs `currentDate`
+- `mergeEvaluations` picks the worse of the two (`danger > warning > good`)
+- `NEAR_DUE_THRESHOLD_DAYS = 30` (km keeps `NEAR_DUE_THRESHOLD_KM = 1000`)
+- `addMonths` is **UTC-based on purpose**: `service_date` arrives as an ISO
+  string parsed as UTC, so local-time month arithmetic would shift the day
+  count by one in UTC+3:30 (Iran). Tests pin this with `Date.UTC`.
+
+Backward compatibility: `currentDate` defaults to `null`, so any call that
+does not pass it — and any template with `interval_months IS NULL` — takes
+exactly the old km-only path.
+
 ### Template matching (3 layers, `service_templates`)
 
 | Layer | `brand` | `model` | Means |
@@ -203,7 +236,9 @@ listed in the table yields a full 12-service plan even for an unlisted model**.
 
 ### Known limitations
 
-- Time-based health not computed (km only) — service `date` is stored but not scored
+- A vehicle with **no service history** stays `unknown` on the time basis too —
+  without a last-service date there is no reference point, and by design
+  «never serviced» is not scored as overdue
 - A brand **not** in the table still resolves only to the 12 universal rows
 - `getOverallHealth` averages templates without importance weighting
 - Timing-belt rows exist only for engines that really have a belt
@@ -215,7 +250,9 @@ listed in the table yields a full 12-service plan even for an unlisted model**.
 
 1. **No offline support** — PWA manifest added, service worker deliberately skipped (cache/HMR risk in dev)
 2. **Large page components** — `CarProfile` / `AddService` could be split
-3. **Health is km-only** — service `date` is stored but not scored
+3. **Reminders are in-app only** — the overdue/near-due list shows on the
+   dashboard and inside each vehicle file, but nothing reaches the user when
+   they are not in the app (no push, no email, no service worker yet)
 4. **`service_templates` policy is `to public`** — anon can read the reference
    table. Harmless (no private data) but could be tightened to `authenticated`
 5. **Dead tables** — `service_items` / `vehicle_services` are unused leftovers
@@ -234,6 +271,12 @@ service — folded onto the canonical catalog names by
 `SERVICE_TITLE_ALIASES` in the health engine; the wrong 5,000 km gear-oil
 interval on `لکسوس/ls460L` corrected to 60,000 km (018).
 
+**Cleared on 2026-10-21 (second pass):** health now scores **time as well as
+distance** (migration 019 + `interval_months` on all 579 template rows), so a
+low-mileage car no longer reports «سالم» forever; overdue / near-due services
+are surfaced as **reminders** on the dashboard and inside each vehicle file;
+and a **printable vehicle report** exists at `/report/:id` (PRD ۵ + ۷).
+
 ---
 
 ## 8. Roadmap Alignment (PRD)
@@ -245,9 +288,10 @@ interval on `لکسوس/ls460L` corrected to 60,000 km (018).
 | ۲ انتقال مالکیت | ✅ Done & E2E verified 2026-10-19 | — |
 | ۹ PWA | ✅ manifest + RTL + meta | service worker deferred |
 | حساب/خودرو/سلامت | ✅ verified E2E | — |
-| تصویر فاکتور (Storage) | ❌ Not started | needs bucket + policy |
-| یادآوری‌ها / اعلان | ❌ Not started | Phase 5 |
-| خروجی گزارش خودرو | ❌ Not started | Phase 7 |
+| تصویر فاکتور (Storage) | ✅ Done & E2E verified 2026-10-19 | — |
+| سلامت مبتنی بر زمان (ماه) | ✅ Built 2026-10-21 | migration 019 + two-basis engine; DB verified |
+| یادآوری‌ها / اعلان (PRD ۵) | ✅ Built 2026-10-21 — **visual E2E pending** | engine unit-tested, DB verified; needs a logged-in session to eyeball |
+| خروجی گزارش خودرو (PRD ۷) | ✅ Built 2026-10-21 — **visual E2E pending** | `/report/:id` + `window.print()`/PDF; route registration verified |
 
 ---
 
@@ -278,5 +322,5 @@ E2E, transfer chain E2E, data cleanup, debug `console.log` removal).
 
 ---
 
-*Report generated: 2026-10-05 — **last updated: 2026-10-19***
-*Updated after: migrations 013/014 applied, full E2E pass (auth, vehicle registration, service registration with date + cost, health score, RLS isolation, logout, protected routes, vehicle edit, PWA, service-center verification chain, ownership transfer chain), and live-DB test-data cleanup.*
+*Report generated: 2026-10-05 — **last updated: 2026-10-21***
+*Updated after: migrations 013–019 applied, full E2E pass (auth, vehicle registration, service registration with date + cost, health score, RLS isolation, logout, protected routes, vehicle edit, PWA, service-center verification chain, ownership transfer chain), live-DB test-data cleanup, the `SERVICE_TITLE_ALIASES` duplicate fix, time-based health (`interval_months`), service reminders, and the printable vehicle report.*

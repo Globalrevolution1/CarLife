@@ -10,6 +10,7 @@ import CenterRegister from "./pages/CenterRegister";
 import CenterPanel from "./pages/CenterPanel";
 import CarEdit from "./pages/CarEdit";
 import TransferClaim from "./pages/TransferClaim";
+import VehicleReport from "./pages/VehicleReport";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // صفحهٔ دیباگ /test و فایل‌های بلااستفاده (SupabaseTest, Dashboard,
@@ -87,6 +88,17 @@ function App() {
           element={
             <ProtectedRoute>
               <AddService />
+            </ProtectedRoute>
+          } 
+        />
+
+
+        {/* خروجی گزارش خودرو — قابل چاپ / ذخیره PDF */}
+        <Route 
+          path="/report/:id" 
+          element={
+            <ProtectedRoute>
+              <VehicleReport />
             </ProtectedRoute>
           } 
         />

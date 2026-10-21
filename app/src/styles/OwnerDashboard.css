@@ -288,3 +288,178 @@
     font-weight:700;
 
 }
+
+
+/* =================================
+   REMINDERS — PRD Phase 5
+   سرویس‌های عقب‌افتاده / نزدیک‌موعد
+   ================================= */
+
+.reminders-panel {
+
+    background:#fffdf5;
+
+    border:1px solid #f3d9a4;
+
+    border-radius:22px;
+
+    padding:16px;
+
+    margin-bottom:22px;
+
+}
+
+
+.reminders-title {
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    gap:10px;
+
+    flex-wrap:wrap;
+
+}
+
+
+.reminders-title h3 {
+
+    margin:0;
+
+    color:#071a33;
+
+    font-size:18px;
+
+}
+
+
+.reminders-title span {
+
+    background:#d4af37;
+
+    color:white;
+
+    border-radius:30px;
+
+    padding:5px 12px;
+
+    font-size:13px;
+
+    font-weight:700;
+
+}
+
+
+.reminder-row {
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    gap:10px;
+
+    background:white;
+
+    border-radius:16px;
+
+    border-right:5px solid #d97706;
+
+    padding:13px 15px;
+
+    margin-top:11px;
+
+    cursor:pointer;
+
+}
+
+
+.reminder-row.is-overdue {
+
+    border-right-color:#dc2626;
+
+    background:#fff5f5;
+
+}
+
+
+.reminder-row.is-soon {
+
+    border-right-color:#d97706;
+
+    background:#fffbeb;
+
+}
+
+
+.reminder-row > div {
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:4px;
+
+}
+
+
+.reminder-row strong {
+
+    color:#071a33;
+
+    font-size:15px;
+
+}
+
+
+.reminder-row span {
+
+    color:#777;
+
+    font-size:13px;
+
+}
+
+
+.reminder-row b {
+
+    color:#071a33;
+
+    font-size:14px;
+
+    text-align:left;
+
+}
+
+
+.reminder-row small {
+
+    color:#888;
+
+    font-size:12px;
+
+    text-align:left;
+
+}
+
+
+/* نشانِ یادآوری داخل کارتِ هر خودرو */
+
+.service-box.reminder-box {
+
+    background:#fff6e0;
+
+    border:1px solid #f3d9a4;
+
+}
+
+
+.service-box.reminder-box strong {
+
+    color:#b45309;
+
+}

@@ -299,7 +299,7 @@ function CenterPanel() {
                     }}
                   >
                     تاریخ: {formatDate(service.service_date)} — کیلومتر:{" "}
-                    {formatNumber(service.mileage)} km
+                    <bdi>{formatNumber(service.mileage)} km</bdi>
                     {service.cost != null && (
                       <> — هزینه: {formatNumber(service.cost)} تومان</>
                     )}

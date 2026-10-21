@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import AppHeader from "../components/AppHeader";
+import SmartLabel from "../components/SmartLabel";
 import {
   getLatestService as engineGetLatestService,
   getOverallHealth as engineGetOverallHealth,
   getUpcomingServices as engineGetUpcomingServices,
+  getDueServices as engineGetDueServices,
 } from "../utils/vehicleHealthEngine";
 import "./../styles/OwnerDashboard.css";
 
@@ -153,7 +155,8 @@ function OwnerDashboard() {
           brand,
           model,
           service_name,
-          interval_km
+          interval_km,
+          interval_months
         `)
 
         .order("interval_km", {
@@ -189,6 +192,10 @@ function OwnerDashboard() {
   }, [loadVehicles]);
 
 
+  // امروز — مبنای سنجش «ماه» (interval_months) در موتور سلامت.
+  const TODAY = new Date();
+
+
   function getLastService(car) {
 
     return engineGetLatestService(
@@ -200,13 +207,14 @@ function OwnerDashboard() {
 
   function getHealth(car) {
 
-const health =
+    const health =
       engineGetOverallHealth({
         templates: serviceTemplates,
         services: car?.services || [],
         currentMileage:
           car?.current_mileage || 0,
         vehicle: car,
+        currentDate: TODAY,
         formatNumber,
       });
 
@@ -237,13 +245,14 @@ const health =
 
   function getNextService(car) {
 
-const upcoming =
+    const upcoming =
       engineGetUpcomingServices({
         templates: serviceTemplates,
         services: car?.services || [],
         currentMileage:
           car?.current_mileage || 0,
         vehicle: car,
+        currentDate: TODAY,
         formatNumber,
       });
 
@@ -265,11 +274,25 @@ const upcoming =
     }
 
 
-    return (
-      formatNumber(
-        upcoming[0].status.remaining
-      ) + " km دیگر"
-    );
+    // label خودِ موتور، مبنای واقعاً تعیین‌کننده را می‌گوید:
+    // «۵۰۰ km دیگر» یا «۱۲ روز دیگر»
+    return upcoming[0].status.label;
+
+  }
+
+
+  // تعداد سرویس‌های عقب‌افتاده / نزدیک‌موعدِ این خودرو
+  function getDueCount(car) {
+
+    return engineGetDueServices({
+      templates: serviceTemplates,
+      services: car?.services || [],
+      currentMileage:
+        car?.current_mileage || 0,
+      vehicle: car,
+      currentDate: TODAY,
+      formatNumber,
+    }).length;
 
   }
 
@@ -280,6 +303,36 @@ const upcoming =
     );
 
   }
+
+
+  // ==========================================
+  // REMINDERS — PRD Phase 5
+  // یادآوری‌های همهٔ خودروها در یک جا،
+  // فوری‌ترین اول (عقب‌افتاده قبل از نزدیک‌موعد).
+  // ==========================================
+
+  const RANK = { danger: 2, warning: 1 };
+
+  const allReminders = vehicles
+    .flatMap(function (car) {
+      return engineGetDueServices({
+        templates: serviceTemplates,
+        services: car?.services || [],
+        currentMileage:
+          car?.current_mileage || 0,
+        vehicle: car,
+        currentDate: TODAY,
+        formatNumber,
+      }).map(function (item) {
+        return { ...item, car };
+      });
+    })
+    .sort(function (a, b) {
+      return (
+        (RANK[b.status.status] || 0) -
+        (RANK[a.status.status] || 0)
+      );
+    });
 
 
   if (loading) {
@@ -322,6 +375,78 @@ const upcoming =
         </div>
 
 
+        {allReminders.length > 0 && (
+
+          <div className="reminders-panel">
+
+            <div className="reminders-title">
+
+              <h3>
+                ⏰ یادآوری‌ها
+              </h3>
+
+              <span>
+                {allReminders.length} مورد نیاز به توجه
+              </span>
+
+            </div>
+
+            {allReminders.map(function (item) {
+
+              return (
+                <div
+                  key={`${item.car.id}-${item.template.id}`}
+                  className={
+                    item.status.status === "danger"
+                      ? "reminder-row is-overdue"
+                      : "reminder-row is-soon"
+                  }
+                  onClick={function () {
+                    openCarProfile(item.car.id);
+                  }}
+                >
+
+                  <div>
+
+                    <strong>
+                      {item.car.brand} {item.car.model}
+                    </strong>
+
+                    <span>
+                      {item.template.service_name}
+                    </span>
+
+                  </div>
+
+                  <div>
+
+                    <b>
+                      {item.status.status === "danger"
+                        ? "🔴"
+                        : "🟡"}{" "}
+                      <SmartLabel>
+                        {item.status.label}
+                      </SmartLabel>
+                    </b>
+
+                    <small>
+                      {item.status.status === "danger"
+                        ? "عقب‌افتاده"
+                        : "نزدیک موعد"}
+                    </small>
+
+                  </div>
+
+                </div>
+              );
+
+            })}
+
+          </div>
+
+        )}
+
+
         {
           vehicles.length === 0 ? (
 
@@ -350,6 +475,9 @@ const upcoming =
 
               const lastService =
                 getLastService(car);
+
+              const dueCount =
+                getDueCount(car);
 
 
               return (
@@ -398,13 +526,12 @@ const upcoming =
                     </strong>
 
                     <small>
-
-                      {
-                        health.percent !== null
-                          ? `سلامت خودرو ${health.percent}%`
-                          : "سلامت خودرو نامشخص"
-                      }
-
+                      سلامت خودرو{" "}
+                      {health.percent !== null ? (
+                        <bdi>{health.percent}%</bdi>
+                      ) : (
+                        "نامشخص"
+                      )}
                     </small>
 
                   </div>
@@ -432,13 +559,16 @@ const upcoming =
 
                         <small>
 
-                          {
-                            lastService.mileage
-                              ? Number(
-                                  lastService.mileage
-                                ).toLocaleString() + " km"
-                              : "کیلومتر ثبت نشده"
-                          }
+                          {lastService.mileage ? (
+                            <bdi>
+                              {Number(
+                                lastService.mileage
+                              ).toLocaleString()}{" "}
+                              km
+                            </bdi>
+                          ) : (
+                            "کیلومتر ثبت نشده"
+                          )}
 
                         </small>
 
@@ -455,10 +585,29 @@ const upcoming =
                     </span>
 
                     <strong>
-                      {getNextService(car)}
+                      <SmartLabel>
+                        {getNextService(car)}
+                      </SmartLabel>
                     </strong>
 
                   </div>
+
+
+                  {dueCount > 0 && (
+
+                    <div className="service-box reminder-box">
+
+                      <span>
+                        ⏰ یادآوری
+                      </span>
+
+                      <strong>
+                        {dueCount} مورد نیاز به توجه
+                      </strong>
+
+                    </div>
+
+                  )}
 
 
                   <div className="vehicle-details">
@@ -471,15 +620,12 @@ const upcoming =
                       </span>
 
                       <strong>
-
-                        {
-                          Number(
+                        <bdi>
+                          {Number(
                             car.current_mileage || 0
-                          ).toLocaleString()
-                        }
-
-                        {" km"}
-
+                          ).toLocaleString()}{" "}
+                          km
+                        </bdi>
                       </strong>
 
                     </div>

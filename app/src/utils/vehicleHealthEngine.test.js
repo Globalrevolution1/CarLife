@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 
 import {
   NEAR_DUE_THRESHOLD_KM,
+  addMonths,
   filterTemplatesForVehicle,
   getLastServiceForTemplate,
   getLatestService,
@@ -9,6 +10,7 @@ import {
   getOverallHealth,
   getTemplateStatus,
   getUpcomingServices,
+  getDueServices,
   normalizeLabel,
   normalizeServiceTitle,
   resolveNextVehicleMileage,
@@ -919,5 +921,259 @@ describe("لایهٔ برند در template ها", () => {
     // اگر عمومی (۵۰,۰۰۰) برنده شده بود موعد ۶۰,۰۰۰ می‌شد و «عقب‌افتاده».
     expect(status.status).toBe("good");
     expect(status.remaining).toBe(9000);
+  });
+});
+
+// =============================================================
+// مبناِ زمان (ماه)
+//
+// هر template می‌تواند یک یا هر دو مبنا را داشته باشد:
+//   interval_km     ← «هر ۱۰,۰۰۰ کیلومتر»
+//   interval_months ← «هر ۶ ماه»
+//
+// قاعده: هر کدام زودتر برسد، تعیین‌کنندهٔ وضعیت است.
+// بدون پاس دادن currentDate، مبناِ زمان اصلاً سنجیده نمی‌شود
+// (رفتار قدیمی دست‌نخورده می‌ماند).
+// =============================================================
+
+const TIME_OIL = {
+  id: "tm1",
+  service_name: "تعویض روغن موتور",
+  interval_km: 10000,
+  interval_months: 6,
+};
+
+const TIME_SERVICE = {
+  id: "s1",
+  title: "تعویض روغن موتور",
+  mileage: 90000,
+  service_date: "2026-01-01",
+};
+
+describe("addMonths — بدون لغزش روز", () => {
+  // عمداً از Date.UTC استفاده می‌شود تا نتیجه به منطقهٔ ساعتی
+  // ماشینِ تست وابسته نباشد (خود تابع هم UTC-محور است).
+  test("روزِ مقصد کمتر نیست ← همان روز حفظ می‌شود", () => {
+    // ۱ مارس + ۲ ماه = ۱ مه
+    expect(addMonths(new Date(Date.UTC(2026, 2, 1)), 2)).toEqual(
+      new Date(Date.UTC(2026, 4, 1)),
+    );
+  });
+
+  test("۳۱ مارس + ۱ ماه ← ۳۰ آوریل", () => {
+    expect(addMonths(new Date(Date.UTC(2026, 2, 31)), 1)).toEqual(
+      new Date(Date.UTC(2026, 3, 30)),
+    );
+  });
+
+  test("۳۱ مارس + ۲ ماه ← ۳۱ مه (مقصد ۳۱ روزه، روز حفظ می‌شود)", () => {
+    expect(addMonths(new Date(Date.UTC(2026, 2, 31)), 2)).toEqual(
+      new Date(Date.UTC(2026, 4, 31)),
+    );
+  });
+
+  test("۳۱ مه + ۱ ماه ← ۳۰ ژوئن", () => {
+    expect(addMonths(new Date(Date.UTC(2026, 4, 31)), 1)).toEqual(
+      new Date(Date.UTC(2026, 5, 30)),
+    );
+  });
+
+  test("۲۹ فوریهٔ کبیسه + ۱۲ ماه ← ۲۸ فوریه", () => {
+    expect(addMonths(new Date(Date.UTC(2028, 1, 29)), 12)).toEqual(
+      new Date(Date.UTC(2029, 1, 28)),
+    );
+  });
+
+  test("۱ ژانویه + ۱۲ ماه ← ۱ ژانویهٔ سال بعد", () => {
+    expect(addMonths(new Date(Date.UTC(2026, 0, 1)), 12)).toEqual(
+      new Date(Date.UTC(2027, 0, 1)),
+    );
+  });
+});
+
+describe("سلامت مبتنی بر زمان", () => {
+  test("بدون currentDate ← رفتار قدیمی دست‌نخورده (فقط کیلومتر)", () => {
+    const status = getTemplateStatus({
+      template: TIME_OIL,
+      services: [TIME_SERVICE],
+      currentMileage: 95000,
+    });
+
+    expect(status.status).toBe("good");
+    expect(status.remaining).toBe(5000);
+    expect(status.daysLeft).toBeNull();
+    expect(status.nextDate).toBeNull();
+    expect(status.overdueByDays).toBeNull();
+  });
+
+  test("کیلومتر سالم ولی ماه گذشته ← عقب‌افتاده", () => {
+    const status = getTemplateStatus({
+      template: TIME_OIL,
+      services: [TIME_SERVICE],
+      currentMileage: 95000,
+      currentDate: new Date("2026-08-01"),
+    });
+
+    // کیلومتر: موعد ۱۰۰,۰۰۰ ← ۵,۰۰۰ مانده (سالم)
+    // زمان: ۱ ژانویه + ۶ ماه = ۱ ژوئیه ← ۳۱ روز عقب
+    expect(status.status).toBe("danger");
+    expect(status.remaining).toBe(5000);
+    expect(status.overdueByDays).toBe(31);
+    expect(status.label).toContain("عقب‌افتاده");
+  });
+
+  test("ماه نزدیک موعد ← warning با وجود کیلومتر سالم", () => {
+    const status = getTemplateStatus({
+      template: TIME_OIL,
+      services: [TIME_SERVICE],
+      currentMileage: 95000,
+      currentDate: new Date("2026-06-20"),
+    });
+
+    expect(status.status).toBe("warning");
+    expect(status.daysLeft).toBe(11);
+  });
+
+  test("کیلومتر عقب‌افتاده ← حکم همان است و برچسب کیلومتری می‌ماند", () => {
+    const status = getTemplateStatus({
+      template: TIME_OIL,
+      services: [TIME_SERVICE],
+      currentMileage: 105000,
+      currentDate: new Date("2026-02-01"),
+    });
+
+    expect(status.status).toBe("danger");
+    expect(status.overdueBy).toBe(5000);
+    // مبنای زمان هنوز مهلت دارد، پس عقب‌افتادگیِ روز صفر است
+    expect(status.overdueByDays).toBe(0);
+  });
+
+  test("بدترینِ دو مبنا انتخاب می‌شود (زمان warning، کیلومتر good)", () => {
+    const status = getTemplateStatus({
+      template: TIME_OIL,
+      services: [TIME_SERVICE],
+      currentMileage: 95000,
+      currentDate: new Date("2026-06-25"),
+    });
+
+    expect(status.status).toBe("warning");
+    expect(status.label).toContain("روز");
+  });
+
+  test("فقط مبناِ زمان (بدون interval_km) کار می‌کند", () => {
+    const status = getTemplateStatus({
+      template: { service_name: "ضد یخ", interval_km: 0, interval_months: 24 },
+      services: [{ id: "s2", title: "ضد یخ", mileage: 120000, service_date: "2026-01-01" }],
+      currentMileage: 130000,
+      currentDate: new Date("2026-06-01"),
+    });
+
+    expect(status.status).toBe("good");
+    expect(status.remaining).toBeNull();
+    expect(status.nextMileage).toBeNull();
+    expect(status.daysLeft).toBeGreaterThan(30);
+  });
+
+  test("هیچ مبنایی تعریف نشده ← «فاصله سرویس مشخص نیست»", () => {
+    const status = getTemplateStatus({
+      template: { service_name: "شمع", interval_km: 0, interval_months: 0 },
+      services: [{ id: "s3", title: "شمع", mileage: 10000, service_date: "2026-01-01" }],
+      currentMileage: 10000,
+      currentDate: new Date("2026-06-01"),
+    });
+
+    expect(status.status).toBe("unknown");
+    expect(status.label).toBe("فاصله سرویس مشخص نیست");
+  });
+
+  test("بدون سابقه ← همچنان «هنوز ثبت نشده»، نه عقب‌افتاده", () => {
+    const status = getTemplateStatus({
+      template: TIME_OIL,
+      services: [],
+      currentMileage: 95000,
+      currentDate: new Date("2030-01-01"),
+    });
+
+    expect(status.status).toBe("unknown");
+    expect(status.label).toBe("هنوز ثبت نشده");
+    expect(status.score).toBeNull();
+  });
+
+  test("getUpcomingServices خودروی عقب‌افتاده را «پیش‌رو» حساب نمی‌کند", () => {
+    const upcoming = getUpcomingServices({
+      templates: [TIME_OIL],
+      services: [{ ...TIME_SERVICE, mileage: 100000 }],
+      currentMileage: 200000,
+      currentDate: new Date("2026-06-01"),
+    });
+
+    // کیلومتر کاملاً عقب است (زمان هنوز مهلت دارد) ← danger و نباید بیاید
+    expect(upcoming).toHaveLength(0);
+  });
+
+  test("getOverallHealth با مبناِ زمان امتیاز را پایین می‌آورد", () => {
+    const health = getOverallHealth({
+      templates: [TIME_OIL],
+      services: [TIME_SERVICE],
+      currentMileage: 95000,
+      currentDate: new Date("2026-08-01"),
+    });
+
+    expect(health.className).toBe("danger");
+    expect(health.score).toBe(50);
+  });
+});
+
+describe("یادآوری‌ها — getDueServices", () => {
+  const templates = [
+    { id: "a", service_name: "تعویض روغن موتور", interval_km: 10000, interval_months: 6 },
+    { id: "b", service_name: "فیلتر هوا", interval_km: 20000, interval_months: 12 },
+    { id: "c", service_name: "شمع", interval_km: 60000, interval_months: 2 },
+  ];
+
+  const services = [
+    // موعد زمانی ۱ ژوئیهٔ ۲۰۲۵ ← مدتها عقب
+    { id: "s1", title: "تعویض روغن موتور", mileage: 90000, service_date: "2025-01-01" },
+    // موعد زمانی آوریل ۲۰۲۷ و کیلومتری ۱۱۰,۰۰۰ ← هر دو سالم
+    { id: "s2", title: "فیلتر هوا", mileage: 90000, service_date: "2026-04-01" },
+    // موعد زمانی ۲۰ ژوئنٔ ۲۰۲۶ ← ۱۹ روز مانده (warning)
+    { id: "s3", title: "شمع", mileage: 90000, service_date: "2026-04-20" },
+  ];
+
+  test("فوری‌ترین اول: danger قبل از warning", () => {
+    const due = getDueServices({
+      templates,
+      services,
+      currentMileage: 95000,
+      currentDate: new Date("2026-06-01"),
+    });
+
+    const names = due.map((item) =>
+      normalizeServiceTitle(item.template.service_name),
+    );
+
+    expect(names).toEqual(["تعویض روغن", "شمع"]);
+  });
+
+  test("خودروی سالم ← هیچ یادآوری‌ای نمی‌سازد", () => {
+    const due = getDueServices({
+      templates: [TIME_OIL],
+      services: [{ ...TIME_SERVICE, mileage: 95000, service_date: "2026-05-01" }],
+      currentMileage: 96000,
+      currentDate: new Date("2026-06-01"),
+    });
+
+    expect(due).toHaveLength(0);
+  });
+
+  test("خودروی بدون سابقه ← یادآوری نمی‌سازد (قاعدهٔ قدیمی)", () => {
+    const due = getDueServices({
+      templates,
+      services: [],
+      currentMileage: 95000,
+      currentDate: new Date("2035-01-01"),
+    });
+
+    expect(due).toHaveLength(0);
   });
 });
