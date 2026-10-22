@@ -638,3 +638,146 @@
   }
 
 }
+
+/* =================================
+   SHARE PUBLIC REPORT — فاز ۸
+   ================================= */
+
+.share-box {
+    border:1px solid #f3d9a4;
+    background:#fffdf5;
+    border-radius:22px;
+    padding:2px 16px 18px;
+}
+
+.share-lead {
+    color:#667085;
+    font-size:13px;
+    line-height:2.1;
+    margin:6px 0 10px;
+}
+
+/* این selector ها دو کلاسی‌اند تا بر `.car-info div`
+   (یک کلاس + یک المنت) غلبه کنند */
+.share-box .share-row {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:transparent;
+    box-shadow:none;
+    padding:4px 0 8px;
+}
+
+.share-box label {
+    color:#071a33;
+    font-weight:700;
+    font-size:14px;
+}
+
+.share-box select {
+    border:1px solid #e6d9ae;
+    background:white;
+    color:#071a33;
+    border-radius:12px;
+    padding:8px 12px;
+    font-family:inherit;
+    font-size:14px;
+}
+
+.share-box .share-status {
+    background:transparent;
+    box-shadow:none;
+    padding:2px 0 6px;
+    font-weight:700;
+    font-size:14px;
+    line-height:1.9;
+}
+
+.share-status.is-ok  { color:#1a7f4b; }
+.share-status.is-soon { color:#b45309; }
+.share-status.is-off { color:#667085; }
+
+.share-link {
+    width:100%;
+    box-sizing:border-box;
+    direction:ltr;
+    text-align:left;
+    border:1px dashed #d9c48a;
+    background:white;
+    border-radius:12px;
+    padding:10px 12px;
+    font-size:13px;
+    color:#071a33;
+}
+
+.share-box .share-actions {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    background:transparent;
+    box-shadow:none;
+    padding:0;
+    margin-top:10px;
+}
+
+.share-btn {
+    border:none;
+    border-radius:14px;
+    padding:11px 16px;
+    font-family:inherit;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    background:#eef1f6;
+    color:#071a33;
+}
+
+.share-btn:disabled {
+    opacity:.55;
+    cursor:wait;
+}
+
+.share-btn.primary {
+    background:linear-gradient(135deg,#d4af37,#f5d97b);
+    color:#3a2c05;
+}
+
+.share-btn.danger {
+    background:#fee2e2;
+    color:#b91c1c;
+}
+
+.share-box .share-error {
+    background:#fee2e2;
+    color:#b91c1c;
+    border-radius:12px;
+    padding:10px 12px;
+    font-size:13px;
+    line-height:1.9;
+    margin-top:8px;
+}
+
+.share-box .share-qr-wrap {
+    display:flex;
+    align-items:center;
+    gap:14px;
+    background:transparent;
+    box-shadow:none;
+    padding:12px 0 0;
+    margin-top:12px;
+    border-top:1px dashed #f0e2b8;
+}
+
+.share-qr-wrap small {
+    color:#667085;
+    font-size:12px;
+    line-height:2.1;
+}
+
+.share-qr {
+    border-radius:10px;
+    border:1px solid #eee;
+    background:white;
+    flex:0 0 auto;
+}

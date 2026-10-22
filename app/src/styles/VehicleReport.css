@@ -372,3 +372,84 @@
   }
 
 }
+
+
+/* =================================
+   SHARE LINK + VERIFIED HISTORY — فاز ۸
+   ================================= */
+
+.report-share-badge {
+    display:inline-block;
+    background:#eef4ff;
+    color:#1d4ed8;
+    border:1px solid #cfe0ff;
+    border-radius:999px;
+    padding:9px 15px;
+    font-size:13px;
+    font-weight:700;
+    line-height:1.4;
+}
+
+.report-verified {
+    display:inline-block;
+    margin-top:6px;
+    padding:3px 9px;
+    border-radius:999px;
+    background:#e7f7ee;
+    color:#1a7f4b;
+    border:1px solid #bfe8d3;
+    font-size:11.5px;
+    font-weight:700;
+}
+
+.report-verified-note {
+    margin:0 0 12px;
+    padding:10px 12px;
+    border-radius:12px;
+    background:#e7f7ee;
+    color:#14663f;
+    font-size:13px;
+    font-weight:700;
+    line-height:1.9;
+}
+
+.report-share-block {
+    background:#f7f9fc;
+    border:1px dashed #cfd8e6;
+}
+
+.report-share-inner {
+    display:flex;
+    align-items:center;
+    gap:18px;
+    flex-wrap:wrap;
+}
+
+.report-share-inner > div {
+    flex:1 1 240px;
+    min-width:0;
+}
+
+.report-share-link {
+    margin:0 0 6px;
+    font-size:13px;
+    font-weight:700;
+    color:#071a33;
+    word-break:break-all;
+}
+
+.report-share-block .report-note {
+    margin:0;
+}
+
+@media print {
+
+  .report-share-badge {
+    display:none !important;
+  }
+
+  .report-share-block {
+    break-inside:avoid;
+  }
+
+}

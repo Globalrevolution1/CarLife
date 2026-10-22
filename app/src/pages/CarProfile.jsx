@@ -4,6 +4,13 @@ import { supabase } from "../lib/supabase";
 import { toPersianError } from "../lib/errorMessage";
 import AppHeader from "../components/AppHeader";
 import SmartLabel from "../components/SmartLabel";
+import ShareQr from "../components/ShareQr";
+import {
+  SHARE_WINDOWS_DAYS,
+  buildShareLink,
+  expiryFromDays,
+  shareState,
+} from "../utils/share";
 import {
   filterTemplatesForVehicle,
   getLatestService,
@@ -67,6 +74,12 @@ function CarProfile() {
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferError, setTransferError] = useState("");
 
+  // اشتراک‌گذاری لینک گزارش (فاز ۸)
+  const [shareDays, setShareDays] = useState(30);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
+
   // =========================================================
   // LOAD CAR
   //
@@ -95,7 +108,9 @@ function CarProfile() {
           production_year_gregorian,
           color,
           vin,
-          current_mileage
+          current_mileage,
+          share_token,
+          share_expires_at
         `)
         .eq("id", id)
         .single();
@@ -428,6 +443,107 @@ function CarProfile() {
     } catch (unexpected) {
       setTransferError(toPersianError(unexpected && unexpected.message));
       setTransferBusy(false);
+    }
+  }
+
+  // =========================================================
+  // اشتراک‌گذاری لینک عمومی گزارش (فاز ۸ — Trust & Resale)
+  //
+  // نوشتن روی vehicles فقط برای مالکِ فعال مجاز است
+  // (policy «Owners can update their vehicles» از 012).
+  //
+  // «فعال‌سازی» توکن را عوض می‌کند تا لینک‌های قبلیِ احتمالی
+  // (چاپ‌شده یا فرستاده‌شده) بی‌اثر شوند؛ «تمدید» اما توکن را
+  // نگه می‌دارد چون ممکن است QR آن قبلاً چاپ شده باشد.
+  // «لغو» فقط مهلت را صفر می‌کند و تابع دیتابیس دیگر چیزی
+  // برنمی‌گرداند.
+  // =========================================================
+
+  const shareStatus = car
+    ? shareState(car.share_expires_at)
+    : shareState(null);
+
+  const shareLink =
+    shareStatus.active && car && car.share_token
+      ? buildShareLink(car.share_token)
+      : "";
+
+
+  async function handleShare(mode) {
+    setShareBusy(true);
+    setShareError("");
+    setShareCopied(false);
+
+    try {
+      let payload;
+
+      if (mode === "revoke") {
+        payload = { share_expires_at: null };
+      } else if (mode === "extend") {
+        // تمدید از لحظهٔ انقضای فعلی ادامه پیدا می‌کند تا کاربر
+        // روزهای خریداری‌شده را از دست ندهد.
+        payload = {
+          share_expires_at: shareStatus.active
+            ? new Date(
+                shareStatus.endsAt.getTime() +
+                  shareDays * 86400000
+              ).toISOString()
+            : expiryFromDays(shareDays),
+        };
+      } else {
+        // چرخش توکن فقط در context امن ممکن است؛ در غیر این صورت
+        // توکن فعلی حفظ می‌شود (link همچنان کار می‌کند).
+        const rotated =
+          typeof crypto !== "undefined" &&
+          typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : car.share_token;
+
+        if (!rotated) {
+          setShareError(
+            "توکن اشتراک برای این خودرو ساخته نشده است؛ صفحه را تازه‌سازی کنید."
+          );
+          setShareBusy(false);
+          return;
+        }
+
+        payload = {
+          share_token: rotated,
+          share_expires_at: expiryFromDays(shareDays),
+        };
+      }
+
+      const { error } = await supabase
+        .from("vehicles")
+        .update(payload)
+        .eq("id", car.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await loadCar();
+    } catch (unexpected) {
+      setShareError(
+        toPersianError(unexpected && unexpected.message)
+      );
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+
+  async function handleCopyShareLink() {
+    setShareError("");
+    setShareCopied(false);
+
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setShareCopied(true);
+    } catch {
+      setShareError(
+        "کپی خودکار ممکن نبود؛ لینک را دستی انتخاب و کپی کنید."
+      );
     }
   }
 
@@ -872,6 +988,137 @@ function CarProfile() {
         >
           📄 خروجی گزارش خودرو (چاپ / PDF)
         </button>
+
+        {/* ================================= */}
+        {/* SHARE PUBLIC REPORT — فاز ۸      */}
+        {/* ================================= */}
+
+        <div className="car-info share-box">
+
+          <h3>
+            🔗 اشتراک گزارش با خریدار
+          </h3>
+
+          <p className="share-lead">
+            لینک عمومی، گزارش کامل (تاریخچهٔ سرویس، سلامت،
+            کیلومتر و VIN) را بدون ورود نشان می‌دهد. تا وقتی
+            فعال است قابل استفاده است و هر زمان بخواهید با یک
+            دکمه باطل می‌شود.
+          </p>
+
+          <div className="share-row">
+            <label htmlFor="share-days">
+              مدت اعتبار
+            </label>
+
+            <select
+              id="share-days"
+              value={shareDays}
+              disabled={shareBusy}
+              onChange={(event) =>
+                setShareDays(Number(event.target.value))
+              }
+            >
+              {SHARE_WINDOWS_DAYS.map((days) => (
+                <option key={days} value={days}>
+                  {days} روز
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {shareError && (
+            <div className="share-error">
+              {shareError}
+            </div>
+          )}
+
+          {shareStatus.active && shareLink ? (
+            <div className="share-on">
+
+              <div
+                className={`share-status ${
+                  shareStatus.daysLeft <= 3
+                    ? "is-soon"
+                    : "is-ok"
+                }`}
+              >
+                🟢 لینک فعال — تا{" "}
+                {formatDate(shareStatus.endsAt)} (
+                {formatNumber(shareStatus.daysLeft)} روز مانده)
+              </div>
+
+              <input
+                className="share-link ltr"
+                readOnly
+                value={shareLink}
+                onFocus={(event) => event.target.select()}
+              />
+
+              <div className="share-actions">
+                <button
+                  type="button"
+                  className="share-btn primary"
+                  onClick={handleCopyShareLink}
+                  disabled={shareBusy}
+                >
+                  {shareCopied ? "✓ کپی شد" : "کپی لینک"}
+                </button>
+
+                <button
+                  type="button"
+                  className="share-btn"
+                  onClick={() => handleShare("extend")}
+                  disabled={shareBusy}
+                >
+                  ⏳ تمدید {shareDays} روز
+                </button>
+
+                <button
+                  type="button"
+                  className="share-btn danger"
+                  onClick={() => handleShare("revoke")}
+                  disabled={shareBusy}
+                >
+                  ✕ لغو لینک
+                </button>
+              </div>
+
+              <div className="share-qr-wrap">
+                <ShareQr value={shareLink} size={126} />
+
+                <small>
+                  کد QR همین لینک است؛ در نسخهٔ چاپیِ گزارش هم
+                  چاپ می‌شود تا خریدار با موبایل اسکن کند.
+                </small>
+              </div>
+
+            </div>
+          ) : (
+            <div className="share-off">
+
+              <div className="share-status is-off">
+                ⚪ لینک عمومی غیرفعال است
+                {shareStatus.expired
+                  ? " (لینک قبلی منقضی شده)"
+                  : ""}
+              </div>
+
+              <div className="share-actions">
+                <button
+                  type="button"
+                  className="share-btn primary"
+                  onClick={() => handleShare("activate")}
+                  disabled={shareBusy}
+                >
+                  🔗 فعال‌سازی لینک {shareDays} روزه
+                </button>
+              </div>
+
+            </div>
+          )}
+
+        </div>
 
         {/* ================================= */}
         {/* TRANSFER TO NEXT OWNER */}

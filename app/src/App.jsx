@@ -104,6 +104,14 @@ function App() {
         />
 
 
+        {/* گزارش عمومی با لینک اشتراک (فاز ۸) — بدون ورود.
+            دسترسی فقط با توکنِ منقضی‌نشده از مسیر تابع دیتابیس */}
+        <Route 
+          path="/v/:token" 
+          element={<VehicleReport publicMode />} 
+        />
+
+
         <Route 
           path="/center-register" 
           element={

@@ -1,21 +1,22 @@
-# Karnegar — Status Report (2026-10-21)
+# Karnegar — Status Report (2026-10-22)
 
 ## 1. Executive Summary
 
 | Metric | Value |
 |---|---|
 | Project | Karnegar (formerly CarLife) |
-| MVP (PRD sections 2 + 5 + 6 + 9) | Frontend 100% written — **DB migrations 013–019 applied & E2E verified** |
-| Overall Progress | ~95% of PRD scope |
+| MVP (PRD sections 2 + 5 + 6 + 9) | Frontend 100% written — **DB migrations 013–020 applied & E2E verified** |
+| Overall Progress | ~97% of PRD scope |
 | Database | Supabase (PostgreSQL) — live, RLS verified by E2E probe |
 | Auth | Supabase Auth (email/password) |
 | Frontend | React 19 + Vite 8 + React Router 7 |
 | CSS | Plain CSS per-page files |
-| Quality gates | `npm run verify` → lint 0 errors, **108 tests pass**, production build OK (90 modules) |
+| Quality gates | `npm run verify` → lint 0 errors, **125 tests pass**, production build OK (91 modules) |
 
-**No blocker.** Migrations `013`–`019` were executed on the live database and
-verified by query. The live database is back to its clean baseline (no test data
-left — only the real client account).
+**No blocker.** Migrations `013`–`020` were executed on the live database and
+verified by query. The live database holds only the real client account; the one
+live data change left in place by design is the **active share link** on
+`لکسوس/ls460L` (expires 2026-11-20, revocable from the vehicle file in one click).
 
 ---
 
@@ -27,16 +28,20 @@ left — only the real client account).
 | `OwnerRegister.jsx` | `/owner-register` | ✅ signUp with full_name, mobile, email, role |
 | `OwnerDashboard.jsx` | `/dashboard` | ✅ Protected — vehicle cards + health + 3 actions |
 | `CarRegister.jsx` | `/car-register` | ✅ Protected — RPC `register_vehicle` |
-| `CarProfile.jsx` | `/car-profile/:id` | ✅ Protected — health + templates + history + **transfer block** |
+| `CarProfile.jsx` | `/car-profile/:id` | ✅ Protected — health + templates + history + **transfer block** + **public share block (activate / extend / revoke + QR)** |
 | `CarEdit.jsx` | `/car-edit/:id` | ✅ Protected — **monotonic mileage rule verified E2E** |
 | `AddService.jsx` | `/add-service/:id` | ✅ Protected — **date + cost + service center** |
 | `CenterRegister.jsx` | `/center-register` | ✅ Protected — register / already-registered state |
 | `CenterPanel.jsx` | `/center-panel` | ✅ Protected — list + `verify_service` RPC |
 | `TransferClaim.jsx` | `/transfer` | ✅ Protected — **E2E verified (claim + one-time code + old owner locked out)** |
-| `VehicleReport.jsx` | `/report/:id` | ✅ Protected — printable report (vehicle, health, plan, reminders, history) |
+| `VehicleReport.jsx` | `/report/:id` | ✅ Protected — printable report (vehicle, health, plan, **verified badge**, history, **share QR block**) |
+| `VehicleReport.jsx` | `/v/:token` | ✅ **Public, no login** — same report via RPC `get_shared_vehicle_report` (token + expiry checked inside the function) |
 
 Shared: `components/AppHeader.jsx` (logout on every protected page),
 `components/ProtectedRoute.jsx` (unauthenticated → `/`),
+`components/SmartLabel.jsx` (Persian bidi — wraps «number + km/%» in `<bdi>`),
+`components/ShareQr.jsx` (local QR → single SVG path, no `innerHTML`),
+`utils/share.js` + `utils/qr.js` (pure helpers + tests),
 `lib/errorMessage.js` (PostgREST messages → Persian).
 
 **Removed (2026-10-19):** `/test` route; dead files `Dashboard.jsx`,
@@ -113,7 +118,7 @@ present, FK `services_service_center_id_fkey` exists.
 
 ---
 
-## 5. Migration Inventory (19 files)
+## 5. Migration Inventory (20 files)
 
 | # | File | Status |
 |---|---|---|
@@ -126,6 +131,7 @@ present, FK `services_service_center_id_fkey` exists.
 | 017 | `market_service_templates.sql` | ✅ **Applied 2026-10-20** — 3-layer coverage of the whole market (38 brands × 12 services + timing belts) |
 | 018 | `fix_lexus_gear_oil_interval.sql` | ✅ **Applied 2026-10-21** — `لکسوس/ls460L` gear-oil interval 5,000 → 60,000 km (owner-confirmed; the 5,000 seeded by 011 was a data-entry artefact) |
 | 019 | `interval_months.sql` | ✅ **Applied 2026-10-21** — `service_templates.interval_months` (time-based health); 6–60 months per service, 579/579 rows populated |
+| 020 | `share_link.sql` | ✅ **Applied 2026-10-22** — `vehicles.share_token` + `vehicles.share_expires_at`, unique partial index, RPC `get_shared_vehicle_report` (`security definer`, token + expiry checked inside), `EXECUTE` granted to `anon`, table `vehicles` closed to `anon` | |
 
 `_cleanup_e2e_test_data.sql` — ✅ **Executed 2026-10-19**; post-state verified:
 `vehicles=2, ownerships=2, services=4, profiles=1, users=1, centers=0, codes=0, leftover=0`.
@@ -181,6 +187,36 @@ present, FK `services_service_center_id_fkey` exists.
 - legacy names from 011 (`تعویض روغن`, `تعویض روغن گیربکس`, `تعویض فیلتر هوا`)
   mapped too, so dedicated Lexus rows get a time basis as well
 - constraint `service_templates_interval_months_positive` (NULL or > 0)
+
+---
+
+### Actual post-020 verification (2026-10-22)
+
+Structure:
+
+- `vehicles.share_token` + `vehicles.share_expires_at` exist (2 columns) ✅
+- `vehicles_share_token_uidx` (unique partial) = 1 ✅
+- `get_shared_vehicle_report` in `pg_proc` = 1 ✅
+- `has_function_privilege('anon', …, 'EXECUTE')` = **true** ✅
+- `has_function_privilege('authenticated', …, 'EXECUTE')` = true ✅
+- `has_table_privilege('anon', 'public.vehicles', 'SELECT')` = **false** ✅
+- `has_table_privilege('authenticated', 'public.vehicles', 'UPDATE')` = **true** ✅
+  (the owner writes the share columns through the existing
+  «Owners can update their vehicles» policy — no new policy needed)
+
+Behaviour, probed **as the `anon` role** (`set role anon; …`):
+
+| Probe | Result |
+|---|---|
+| valid token | full object: brand, VIN, current mileage, 4 services, `valid_until` ✅ |
+| random uuid | `NULL` ✅ |
+| token with `share_expires_at` in the past | `NULL` ✅ |
+| `select * from public.vehicles` | `42501 permission denied for table vehicles` ✅ |
+
+Browser E2E: `/v/:token` renders all 5 report sections without a session, shows the
+share badge + expiry, hides «بازگشت به پرونده», leaks no service data when the link
+is expired (friendly message instead), **0 console errors**. Re-verified after
+temporarily expiring and then restoring the real expiry value.
 
 ---
 
@@ -257,6 +293,16 @@ listed in the table yields a full 12-service plan even for an unlisted model**.
    table. Harmless (no private data) but could be tightened to `authenticated`
 5. **Dead tables** — `service_items` / `vehicle_services` are unused leftovers
    and could be dropped once confirmed to hold no valuable data
+6. **The share link is a bearer capability** — whoever holds `/v/:token` can read
+   the report until it expires. Acceptable by design (122-bit random token,
+   revocable, expiry enforced inside a `security definer` function, and the
+   vehicle table itself stays closed to `anon`), but there is **no rate limiting**
+   on the RPC. Brute-forcing 2^122 is not a realistic threat; still worth noting
+   if the threat model changes.
+7. **`qrcode-generator` is bundled, not lazy-loaded** — it adds ≈28 kB raw /
+   ≈10 kB gzip to the single vendor chunk (507 → 535 kB). Fine for now; if the
+   bundle grows further, move the QR behind `React.lazy()` so it only loads on
+   the pages that render it.
 
 **Cleared on 2026-10-19:** all 24 `console.log` debug statements removed;
 test data purged from the live database; 5 dead files deleted
@@ -276,6 +322,18 @@ distance** (migration 019 + `interval_months` on all 579 template rows), so a
 low-mileage car no longer reports «سالم» forever; overdue / near-due services
 are surfaced as **reminders** on the dashboard and inside each vehicle file;
 and a **printable vehicle report** exists at `/report/:id` (PRD ۵ + ۷).
+Both were **visual-E2E verified on 2026-10-21** with a logged-in session
+(0 wrong bidi readings, 0 console errors), the `SmartLabel` bidi fix landed,
+and the work was committed as `2526609`.
+
+**Cleared on 2026-10-22 (third pass — PRD ۸ «Trust & Resale»):** the vehicle
+report is now **shareable with a buyer** — an owner-activated link at `/v/:token`
+with a 7/30/90-day window, extendable and **revocable in one click** (020).
+Access is granted only through the `get_shared_vehicle_report` function, which
+checks token + expiry internally, so the vehicle table never opens up. The
+report additionally shows **verified history** (✓ badge + «X از Y سرویس» summary
+for `verification_status = service_center_verified`) and prints a **locally
+generated QR code** of the share link.
 
 ---
 
@@ -289,9 +347,13 @@ and a **printable vehicle report** exists at `/report/:id` (PRD ۵ + ۷).
 | ۹ PWA | ✅ manifest + RTL + meta | service worker deferred |
 | حساب/خودرو/سلامت | ✅ verified E2E | — |
 | تصویر فاکتور (Storage) | ✅ Done & E2E verified 2026-10-19 | — |
-| سلامت مبتنی بر زمان (ماه) | ✅ Built 2026-10-21 | migration 019 + two-basis engine; DB verified |
-| یادآوری‌ها / اعلان (PRD ۵) | ✅ Built 2026-10-21 — **visual E2E pending** | engine unit-tested, DB verified; needs a logged-in session to eyeball |
-| خروجی گزارش خودرو (PRD ۷) | ✅ Built 2026-10-21 — **visual E2E pending** | `/report/:id` + `window.print()`/PDF; route registration verified |
+| سلامت مبتنی بر زمان (ماه) | ✅ Done & visual E2E verified 2026-10-21 | migration 019 + two-basis engine; DB verified |
+| یادآوری‌ها / اعلان (PRD ۵) | ✅ Done & visual E2E verified 2026-10-21 | dashboard panel + file card; overdue/near-due confirmed against temporary rows, then purged |
+| خروجی گزارش خودرو (PRD ۷) | ✅ Done & visual E2E verified 2026-10-21 | `/report/:id` + `window.print()`/PDF |
+| **فاز ۸ Trust & Resale** — لینک اشتراک + QR | ✅ Done & E2E verified **2026-10-22** | migration 020; anon probed as `set role anon`; `/v/:token` without a session |
+| **فاز ۸** — Verified Service History | ✅ Done & visual E2E verified 2026-10-22 | ✓ badge + «X از Y» summary; verified on a temporarily flipped row, then restored |
+| فاز ۹ Ecosystem — ویرایش/حذف سرویس | ⬜ Not started | needs UI + RLS design |
+| فاز ۹ Ecosystem — اعلان واقعی (push/email) | ⬜ Not started | needs a service worker or a mail provider |
 
 ---
 
@@ -300,15 +362,27 @@ and a **printable vehicle report** exists at `/report/:id` (PRD ۵ + ۷).
 **Done on 2026-10-19** ✅ — items 1–7 of the previous list (013, 014, center chain
 E2E, transfer chain E2E, data cleanup, debug `console.log` removal).
 
-**Next (owner decisions):**
+**Done on 2026-10-21** ✅ — the zero-byte files and `SupabaseTest.jsx` were
+deleted, the invoice-image decision resolved (015), the working tree was
+committed (`2526609`, 15 files, +2631/−161) and pushed to `origin/main`.
 
-1. Delete the 3 zero-byte files + `SupabaseTest.jsx` (tracked in git)
-2. Decide on PRD gaps: invoice image (Storage bucket + policy), `service_templates`
-   coverage for more brand/model combos
-3. Optional hardening: scope `service_templates` SELECT to `authenticated`,
+**Done on 2026-10-22** ✅ — phase ۸ (share link + QR + verified history, 020).
+
+**Next (owner decisions), in suggested order:**
+
+1. **Documentation pass** — this report is current; `KARNEGAR_MASTER_CONTEXT.md`
+   still describes pre-019/020 reality in places and should be reconciled
+2. **Edit / delete a service** — the only user-facing gap in the daily flow
+   (a wrong entry currently has no UI path out; needs an RPC + RLS, not just a
+   button)
+3. **Real notifications** — reminders exist in-app only; decide between a service
+   worker (push) and an email/SMS provider
+4. **Optional hardening** — scope `service_templates` SELECT to `authenticated`,
    drop the dead tables `service_items` / `vehicle_services`
-4. Review `KARNEGAR_MASTER_CONTEXT.md` against the current reality
-5. Commit the working tree (currently all changes uncommitted)
+5. **Housekeeping** — `npm audit fix` for the 2 pre-existing high-severity
+   advisories in the dev toolchain (`vite` + `source-map-js`; unrelated to app
+   runtime and to `qrcode-generator`), and consider `React.lazy()` for the QR
+   code if the bundle keeps growing
 
 ---
 
@@ -322,5 +396,5 @@ E2E, transfer chain E2E, data cleanup, debug `console.log` removal).
 
 ---
 
-*Report generated: 2026-10-05 — **last updated: 2026-10-21***
-*Updated after: migrations 013–019 applied, full E2E pass (auth, vehicle registration, service registration with date + cost, health score, RLS isolation, logout, protected routes, vehicle edit, PWA, service-center verification chain, ownership transfer chain), live-DB test-data cleanup, the `SERVICE_TITLE_ALIASES` duplicate fix, time-based health (`interval_months`), service reminders, and the printable vehicle report.*
+*Report generated: 2026-10-05 — **last updated: 2026-10-22***
+*Updated after: migrations 013–020 applied, full E2E pass (auth, vehicle registration, service registration with date + cost, health score, RLS isolation, logout, protected routes, vehicle edit, PWA, service-center verification chain, ownership transfer chain), live-DB test-data cleanup, the `SERVICE_TITLE_ALIASES` duplicate fix, time-based health (`interval_months`), service reminders, the printable vehicle report, and the buyer-facing **share link** (`/v/:token`, revocable, QR + verified-history badges in the report).*

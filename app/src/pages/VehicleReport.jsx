@@ -11,6 +11,12 @@ import {
 
 import "./../styles/VehicleReport.css";
 import SmartLabel from "../components/SmartLabel";
+import ShareQr from "../components/ShareQr";
+import {
+  buildShareLink,
+  isVerified,
+  shareState,
+} from "../utils/share";
 
 // =============================================================
 // گزارش پروندهٔ دیجیتال خودرو — PRD Phase 7
@@ -38,7 +44,7 @@ const STATUS_RANK = {
 };
 
 
-function VehicleReport() {
+function VehicleReport({ publicMode = false }) {
 
   const { id } = useParams();
   const navigate = useNavigate();
@@ -49,6 +55,12 @@ function VehicleReport() {
   const [serviceTemplates, setServiceTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // فقط در حالت مالک: توکن و انقضای لینک اشتراک (برای نمایش QR)
+  const [share, setShare] = useState(null);
+
+  // فقط در حالت عمومی: تاریخ اعتبار لینکی که با آن آمده‌اند
+  const [sharedUntil, setSharedUntil] = useState(null);
+
 
   // =========================================================
   // LOAD
@@ -58,55 +70,105 @@ function VehicleReport() {
     setLoading(true);
 
     try {
-      const {
-        data: carData,
-        error: carError,
-      } = await supabase
-        .from("vehicles")
-        .select(`
-          id,
-          brand,
-          model,
-          production_year_solar,
-          production_year_gregorian,
-          color,
-          vin,
-          current_mileage
-        `)
-        .eq("id", id)
-        .single();
+      // -------------------------------------------------------
+      // حالت عمومی (لینک اشتراک) — بدون ورود
+      //
+      // تنها دروازه، تابع دیتابیس است: شناسهٔ خودرو پذیرفته
+      // نمی‌شود، فقط توکنِ منقضی‌نشده. RLS جدول vehicles برای
+      // anon بسته است و عمداً هم باز نمی‌شود.
+      // -------------------------------------------------------
 
-      if (carError) {
-        console.error("REPORT VEHICLE ERROR:", carError);
-        setCar(null);
-        return;
+      if (publicMode) {
+        const { data, error } = await supabase.rpc(
+          "get_shared_vehicle_report",
+          { p_token: id },
+        );
+
+        if (error) {
+          console.error("SHARED REPORT ERROR:", error);
+          setCar(null);
+          return;
+        }
+
+        if (!data || !data.vehicle) {
+          setCar(null);
+          return;
+        }
+
+        setCar(data.vehicle);
+        setServices(
+          (data.services || []).map((service) => ({
+            ...service,
+            // مرکز همراه با ردیف می‌آید؛ نیازی به جدول جدا نیست
+            service_center_id: null,
+          })),
+        );
+        setCenters([]);
+        setSharedUntil(data.valid_until || null);
+        setShare(null);
+      } else {
+        const {
+          data: carData,
+          error: carError,
+        } = await supabase
+          .from("vehicles")
+          .select(`
+            id,
+            brand,
+            model,
+            production_year_solar,
+            production_year_gregorian,
+            color,
+            vin,
+            current_mileage,
+            share_token,
+            share_expires_at
+          `)
+          .eq("id", id)
+          .single();
+
+        if (carError) {
+          console.error("REPORT VEHICLE ERROR:", carError);
+          setCar(null);
+          return;
+        }
+
+        setCar(carData);
+        setShare(
+          carData.share_token
+            ? {
+                token: carData.share_token,
+                expiresAt: carData.share_expires_at,
+              }
+            : null,
+        );
+        setSharedUntil(null);
+
+        const { data: servicesData } = await supabase
+          .from("services")
+          .select(`
+            id,
+            title,
+            description,
+            service_date,
+            mileage,
+            cost,
+            verification_status,
+            service_center_id
+          `)
+          .eq("vehicle_id", id)
+          .order("service_date", { ascending: false })
+          .order("created_at", { ascending: false });
+
+        setServices(servicesData || []);
+
+        const { data: centersData } = await supabase
+          .from("service_centers")
+          .select("id, name")
+          .order("name", { ascending: true });
+
+        setCenters(centersData || []);
       }
-
-      setCar(carData);
-
-      const { data: servicesData } = await supabase
-        .from("services")
-        .select(`
-          id,
-          title,
-          description,
-          service_date,
-          mileage,
-          cost,
-          service_center_id
-        `)
-        .eq("vehicle_id", id)
-        .order("service_date", { ascending: false })
-        .order("created_at", { ascending: false });
-
-      setServices(servicesData || []);
-
-      const { data: centersData } = await supabase
-        .from("service_centers")
-        .select("id, name")
-        .order("name", { ascending: true });
-
-      setCenters(centersData || []);
 
       const { data: templateData } = await supabase
         .from("service_templates")
@@ -126,7 +188,7 @@ function VehicleReport() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, publicMode]);
 
 
   useEffect(() => {
@@ -190,12 +252,19 @@ function VehicleReport() {
   }
 
 
-  function getCenterName(centerId) {
-    if (!centerId) {
+  function getCenterName(service) {
+    // در حالت عمومی، نام مرکز همراه خود سرویس می‌آید
+    if (service.center_name) {
+      return service.center_name;
+    }
+
+    if (!service.service_center_id) {
       return "";
     }
 
-    const center = centers.find((item) => item.id === centerId);
+    const center = centers.find(
+      (item) => item.id === service.service_center_id,
+    );
 
     return center ? center.name : "";
   }
@@ -256,6 +325,32 @@ function VehicleReport() {
 
 
   // =========================================================
+  // فاز ۸ — Trust & Resale
+  // =========================================================
+
+  // سرویس‌هایی که مرکز خدمات تأیید کرده (Verified History)
+  const verifiedCount = services.filter(isVerified).length;
+
+
+  // وضعیت لینک اشتراک — فقط مالک توکن را دارد
+  const shareStatus = share
+    ? shareState(share.expiresAt, TODAY)
+    : {
+        active: false,
+        expired: false,
+        invalid: false,
+        daysLeft: 0,
+        endsAt: null,
+      };
+
+
+  const shareLink =
+    shareStatus.active && share
+      ? buildShareLink(share.token)
+      : "";
+
+
+  // =========================================================
   // STATES
   // =========================================================
 
@@ -277,16 +372,25 @@ function VehicleReport() {
       <div className="report-page">
         <div className="report-sheet">
           <p className="report-msg">
-            خودرویی با این شناسه پیدا نشد.
+            {publicMode
+              ? "این پرونده در دسترس نیست؛ لینک منقضی یا باطل شده است."
+              : "خودرویی با این شناسه پیدا نشد."}
           </p>
 
-          <button
-            type="button"
-            className="report-btn"
-            onClick={() => navigate("/dashboard")}
-          >
-            بازگشت به داشبورد
-          </button>
+          {publicMode ? (
+            <p className="report-note">
+              برای دریافت نسخهٔ تازه، از مالک خودرو بخواهید لینک
+              اشتراک جدیدی بفرستد.
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="report-btn"
+              onClick={() => navigate("/dashboard")}
+            >
+              بازگشت به داشبورد
+            </button>
+          )}
         </div>
       </div>
     );
@@ -304,13 +408,22 @@ function VehicleReport() {
 
       <div className="report-toolbar print-hide">
 
-        <button
-          type="button"
-          className="report-btn ghost"
-          onClick={() => navigate(`/car-profile/${car.id}`)}
-        >
-          → بازگشت به پرونده
-        </button>
+        {publicMode ? (
+          <span className="report-share-badge">
+            🔗 پروندهٔ اشتراک‌گذاری‌شده
+            {sharedUntil
+              ? ` — معتبر تا ${formatDate(sharedUntil)}`
+              : ""}
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="report-btn ghost"
+            onClick={() => navigate(`/car-profile/${car.id}`)}
+          >
+            → بازگشت به پرونده
+          </button>
+        )}
 
         <button
           type="button"
@@ -340,6 +453,13 @@ function VehicleReport() {
           <p className="report-meta">
             تاریخ تهیه: {reportDate}
           </p>
+
+          {publicMode && (
+            <p className="report-meta">
+              نسخهٔ اشتراکی — اعتبار لینک تا{" "}
+              {formatDate(sharedUntil)}
+            </p>
+          )}
 
         </header>
 
@@ -568,6 +688,14 @@ function VehicleReport() {
             {reminders.length > 0 ? "۵" : "۴"}. تاریخچهٔ سرویس‌ها
           </h2>
 
+          {verifiedCount > 0 && (
+            <p className="report-verified-note">
+              ✓ {formatNumber(verifiedCount)} از{" "}
+              {formatNumber(services.length)} سرویس توسط مرکز
+              خدمات تأیید شده است.
+            </p>
+          )}
+
           {services.length === 0 ? (
 
             <p className="report-msg">
@@ -608,6 +736,12 @@ function VehicleReport() {
                             {service.description}
                           </small>
                         )}
+
+                      {isVerified(service) && (
+                        <span className="report-verified">
+                          ✓ تأیید مرکز خدمات
+                        </span>
+                      )}
                     </td>
 
                     <td>
@@ -617,9 +751,7 @@ function VehicleReport() {
                     </td>
 
                     <td>
-                      {getCenterName(
-                        service.service_center_id,
-                      ) || "—"}
+                      {getCenterName(service) || "—"}
                     </td>
 
                   </tr>
@@ -631,6 +763,32 @@ function VehicleReport() {
           )}
 
         </section>
+
+
+        {/* ---------- SHARE QR (فقط نسخهٔ مالک و لینک فعال) ---------- */}
+
+        {!publicMode && shareLink && (
+          <section className="report-section report-share-block">
+            <h2>مشاهدهٔ آنلاین پرونده</h2>
+
+            <div className="report-share-inner">
+              <ShareQr value={shareLink} size={112} />
+
+              <div>
+                <p className="report-share-link ltr">
+                  {shareLink}
+                </p>
+
+                <p className="report-note">
+                  خریدار می‌تواند با اسکن این کد یا باز کردن لینک،
+                  گزارش را بدون ورود ببیند. اعتبار تا{" "}
+                  {formatDate(share.expiresAt)}؛ پس از آن یا با
+                  لغو اشتراک، لینک از کار می‌افتد.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
 
         {/* ---------- FOOTER ---------- */}
