@@ -1,0 +1,44 @@
+{
+  // =============================================================
+  // کارنگار — استقرار static assets روی Cloudflare Workers
+  //
+  // چرا Workers و نه «legacy Pages»؟
+  //   پروژه در Cloudflare با «Connect GitHub» ساخته شد و همین
+  //   مسیر قابلیت Worker Previews را می‌دهد: هر branch / pull
+  //   request خودکار یک آدرس دموی جدا می‌گیرد.
+  //
+  // چرا `main` ندارد؟
+  //   این پروژه فقط static assets است (خروجی Vite). wrangler
+  //   برای static-only Worker به `main` نیاز ندارد.
+  //
+  // نقش هر بخش:
+  //   assets.directory         خروجی `npm run build` (یعنی ./dist)
+  //
+  //   assets.not_found_handling
+  //     "single-page-application" یعنی هر مسیری که فایلِ متناظر
+  //     نداشته باشد، index.html را برمی‌گرداند. بدون این:
+  //         /v/:token              ← لینک اشتراکِ خریدار → 404
+  //         /car-profile/:id       ← رفرش کردن → 404
+  //         /edit-service/:serviceId ← رفرش → 404
+  //     فایل‌های واقعی (مثل /assets/...) همچنان مستقیم سرو
+  //     می‌شوند؛ فقط نبودِ فایل به index.html می‌رسد.
+  //
+  // تکمیلی: `public/_redirects` هم همین کار را می‌کند و به‌عنوان
+  // لایهٔ دوم باقی می‌ماند.
+  //
+  // ── متغیرهای محیطی ──────────────────────────────────────────
+  // VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY در Vite «موقع
+  // build» خوانده می‌شوند، پس باید در داشبورد Cloudflare وارد
+  // شوند:
+  //     Worker → Settings → Variables → Build variables
+  // .env در .gitignore است و هرگز commit نمی‌شود.
+  // =============================================================
+
+  "name": "carlife",
+  "compatibility_date": "2026-10-22",
+
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
